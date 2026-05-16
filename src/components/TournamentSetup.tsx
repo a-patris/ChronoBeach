@@ -4,6 +4,7 @@ import { clearTournament } from "../storage";
 import { useTournamentContext } from "../context/TournamentContext";
 import { createMatch, createTeam, uid } from "../utils";
 import type { Pool, Tournament } from "../types";
+import { LogoPresetPicker } from "./LogoPresetPicker";
 import { TeamLogoUpload } from "./TeamLogoUpload";
 
 export function TournamentSetup() {
@@ -11,6 +12,7 @@ export function TournamentSetup() {
   const [name, setName] = useState(tournament?.name ?? "");
   const [teamName, setTeamName] = useState("");
   const [poolName, setPoolName] = useState("");
+  const [newTeamLogo, setNewTeamLogo] = useState<string | undefined>();
 
   const createNew = () => {
     if (!name.trim()) return;
@@ -27,11 +29,14 @@ export function TournamentSetup() {
   const addTeam = () => {
     if (!tournament || !teamName.trim()) return;
     const defaultPoolId = tournament.pools[0]?.id;
+    const team = { ...createTeam(teamName), poolId: defaultPoolId };
+    if (newTeamLogo) team.logo = newTeamLogo;
     setTournament({
       ...tournament,
-      teams: [...tournament.teams, { ...createTeam(teamName), poolId: defaultPoolId }],
+      teams: [...tournament.teams, team],
     });
     setTeamName("");
+    setNewTeamLogo(undefined);
   };
 
   const addPool = () => {
@@ -159,6 +164,7 @@ export function TournamentSetup() {
 
       <section className="panel">
         <h2>Équipes ({tournament.teams.length})</h2>
+        <LogoPresetPicker selected={newTeamLogo} onSelect={setNewTeamLogo} />
         <div className="add-team-row">
           <input
             value={teamName}

@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import type { Team } from "../types";
 import { fileToTeamLogo } from "../utils";
 import { TeamLogo } from "./TeamLogo";
+import { LogoPresetPicker } from "./LogoPresetPicker";
 
 type Props = {
   team: Team;
@@ -30,8 +31,13 @@ export function TeamLogoUpload({ team, onChange }: Props) {
 
   return (
     <div className="team-logo-upload">
-      <TeamLogo team={team} size="md" />
-      <div className="team-logo-upload-actions">
+      <LogoPresetPicker
+        selected={team.logo?.startsWith("/logos/presets/") ? team.logo : undefined}
+        onSelect={(path) => onChange(path)}
+      />
+      <div className="team-logo-upload-row">
+        <TeamLogo team={team} size="md" />
+        <div className="team-logo-upload-actions">
         <input
           ref={inputRef}
           type="file"
@@ -49,6 +55,7 @@ export function TeamLogoUpload({ team, onChange }: Props) {
           </button>
         )}
         {error && <span className="logo-error">{error}</span>}
+        </div>
       </div>
     </div>
   );

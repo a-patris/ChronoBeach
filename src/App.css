@@ -340,7 +340,72 @@ label {
   font-size: 1.05rem;
 }
 
+.logo-preset-picker {
+  margin-bottom: 1rem;
+}
+
+.logo-preset-label {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.logo-preset-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.logo-preset-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.35rem;
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  min-width: 4.5rem;
+}
+
+.logo-preset-btn img {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+}
+
+.logo-preset-btn span {
+  font-size: 0.65rem;
+  max-width: 5rem;
+  text-align: center;
+  line-height: 1.2;
+  color: var(--text-muted);
+}
+
+.logo-preset-btn:hover {
+  border-color: var(--accent);
+}
+
+.logo-preset-btn--active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
 .team-logo-upload {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.team-logo-upload .logo-preset-picker {
+  margin-bottom: 0;
+}
+
+.team-logo-upload-row {
   display: flex;
   align-items: center;
   gap: 0.75rem;
