@@ -2,9 +2,11 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { clearTournament } from "../storage";
 import { useTournamentContext } from "../context/TournamentContext";
-import { createMatch, createTeam, uid } from "../utils";
+import { generatePoolSchedule } from "../schedule";
+import { createMatch, createTeam, sortMatchesBySchedule, uid } from "../utils";
 import type { Pool, Tournament } from "../types";
 import { LogoPresetPicker } from "./LogoPresetPicker";
+import { MatchFormFields } from "./MatchFormFields";
 import { TeamLogoUpload } from "./TeamLogoUpload";
 
 export function TournamentSetup() {
@@ -206,6 +208,49 @@ export function TournamentSetup() {
       </section>
 
       <section className="panel">
+        <h2>Programme des matchs</h2>
+        <p className="hint">
+          Générez les matchs de poule (round robin). Avec 2 poules de 3 équipes, le planning
+          V&apos;Hand (horaires 09H30–12H50) est appliqué automatiquement. Phase finale : créez
+          les matchs à la main avec un titre (Finale, Grande finale…).
+        </p>
+        {tournament.pools.length > 0 && (
+          <button
+            type="button"
+            className="btn btn-accent"
+            onClick={() => {
+              const created = generatePoolSchedule(tournament);
+              if (!created.length) {
+                alert("Tous les matchs de poule existent déjà, ou les poules sont incomplètes.");
+                return;
+              }
+              setTournament({
+                ...tournament,
+                matches: sortMatchesBySchedule([...tournament.matches, ...created]),
+              });
+            }}
+          >
+            Générer matchs de poule
+          </button>
+        )}
+        {tournament.matches.length > 0 && (
+          <ul className="match-schedule-preview">
+            {sortMatchesBySchedule(tournament.matches).map((m) => {
+              const a = tournament.teams.find((t) => t.id === m.teamAId)?.name ?? "?";
+              const b = tournament.teams.find((t) => t.id === m.teamBId)?.name ?? "?";
+              return (
+                <li key={m.id}>
+                  {m.scheduledTime && <span className="match-time">{m.scheduledTime}</span>}
+                  {m.label && <span className="match-tag">{m.label}</span>}
+                  {a} vs {b}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+
+      <section className="panel">
         <h2>Créer un match</h2>
         {tournament.teams.length < 2 ? (
           <p className="hint">Ajoutez au moins 2 équipes.</p>
@@ -237,19 +282,30 @@ function CreateMatchForm({
     : tournament.teams;
   const [a, setA] = useState(poolTeams[0]?.id ?? "");
   const [b, setB] = useState(poolTeams[1]?.id ?? "");
+  const [label, setLabel] = useState("");
+  const [scheduledTime, setScheduledTime] = useState("");
 
   const add = () => {
     if (!a || !b || a === b) return;
-    const match = createMatch(a, b, 600, poolId || undefined);
+    const maxOrder = tournament.matches.reduce((max, m) => Math.max(max, m.sortOrder ?? 0), 0);
+    const match = createMatch(a, b, 600, {
+      poolId: poolId || undefined,
+      label: label || undefined,
+      scheduledTime: scheduledTime || undefined,
+      sortOrder: maxOrder + 1,
+    });
     setTournament({
       ...tournament,
-      matches: [...tournament.matches, match],
+      matches: sortMatchesBySchedule([...tournament.matches, match]),
       activeMatchId: tournament.activeMatchId ?? match.id,
     });
+    setLabel("");
+    setScheduledTime("");
   };
 
   return (
-    <div className="create-match">
+    <div className="create-match-block">
+      <div className="create-match">
       {tournament.pools.length > 0 && (
         <select value={poolId} onChange={(e) => setPoolId(e.target.value)}>
           {tournament.pools.map((p) => (
@@ -277,6 +333,13 @@ function CreateMatchForm({
       <button type="button" className="btn btn-accent" onClick={add}>
         Créer match
       </button>
+      </div>
+      <MatchFormFields
+        label={label}
+        scheduledTime={scheduledTime}
+        onLabelChange={setLabel}
+        onScheduledTimeChange={setScheduledTime}
+      />
     </div>
   );
 }

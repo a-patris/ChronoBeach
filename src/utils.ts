@@ -79,17 +79,29 @@ export function applyTeamTimeout(match: Match, teamId: string): Match | null {
   };
 }
 
+export type CreateMatchOptions = {
+  poolId?: string;
+  label?: string;
+  scheduledTime?: string;
+  sortOrder?: number;
+};
+
 export function createMatch(
   teamAId: string,
   teamBId: string,
   durationSeconds = 600,
-  poolId?: string,
+  options?: CreateMatchOptions | string,
 ): Match {
+  const opts: CreateMatchOptions =
+    typeof options === "string" ? { poolId: options } : (options ?? {});
   return {
     id: uid(),
     teamAId,
     teamBId,
-    poolId,
+    poolId: opts.poolId,
+    label: opts.label?.trim() || undefined,
+    scheduledTime: opts.scheduledTime?.trim() || undefined,
+    sortOrder: opts.sortOrder,
     mode: "match",
     scoreA: 0,
     scoreB: 0,
@@ -266,16 +278,35 @@ export function matchStatusLabel(status: Match["status"]): string {
   return labels[status];
 }
 
+function parseScheduledTime(time: string): number {
+  const m = time.match(/^(\d{1,2})[hH:]?(\d{2})$/);
+  if (!m) return 9999;
+  return parseInt(m[1], 10) * 100 + parseInt(m[2], 10);
+}
+
+export function sortMatchesBySchedule(matches: Match[]): Match[] {
+  return [...matches].sort((a, b) => {
+    const oa = a.sortOrder ?? 9999;
+    const ob = b.sortOrder ?? 9999;
+    if (oa !== ob) return oa - ob;
+    if (a.scheduledTime && b.scheduledTime) {
+      return parseScheduledTime(a.scheduledTime) - parseScheduledTime(b.scheduledTime);
+    }
+    return 0;
+  });
+}
+
 export function categorizeMatches(matches: Match[]) {
+  const sorted = sortMatchesBySchedule(matches);
   return {
-    upcoming: matches.filter((m) => m.status === "ready" && !m.winnerTeamId),
-    live: matches.filter(
+    upcoming: sorted.filter((m) => m.status === "ready" && !m.winnerTeamId),
+    live: sorted.filter(
       (m) =>
         m.status === "running" ||
         m.status === "paused" ||
         (m.status !== "finished" && m.mode === "shootout"),
     ),
-    finished: matches.filter((m) => m.status === "finished" || !!m.winnerTeamId),
+    finished: sorted.filter((m) => m.status === "finished" || !!m.winnerTeamId),
   };
 }
 

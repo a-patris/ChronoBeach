@@ -1,13 +1,15 @@
 import type { Match, Tournament } from "../types";
 import { getTeam, hasUsedTimeoutInPeriod, matchStatusLabel } from "../utils";
+import { MatchFormFields } from "./MatchFormFields";
 import { TeamLogo } from "./TeamLogo";
 
 type Props = {
   tournament: Tournament;
   match: Match;
+  onUpdateMatch?: (patch: Partial<Pick<Match, "label" | "scheduledTime">>) => void;
 };
 
-export function MatchInfo({ tournament, match }: Props) {
+export function MatchInfo({ tournament, match, onUpdateMatch }: Props) {
   const teamA = getTeam(tournament, match.teamAId);
   const teamB = getTeam(tournament, match.teamBId);
   const p1 = match.periodWinners.period1
@@ -20,6 +22,16 @@ export function MatchInfo({ tournament, match }: Props) {
   return (
     <section className="panel match-info">
       <h2>Match actif</h2>
+      {onUpdateMatch && (
+        <MatchFormFields
+          label={match.label ?? ""}
+          scheduledTime={match.scheduledTime ?? ""}
+          onLabelChange={(label) => onUpdateMatch({ label: label || undefined })}
+          onScheduledTimeChange={(scheduledTime) =>
+            onUpdateMatch({ scheduledTime: scheduledTime || undefined })
+          }
+        />
+      )}
       <div className="match-info-grid">
         <div>
           <span className="label">Équipe A</span>

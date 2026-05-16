@@ -1,11 +1,18 @@
 import { useEffect, useState } from "react";
 import type { Match, Tournament } from "../types";
+import type { CreateMatchOptions } from "../utils";
 import { categorizeMatches, getTeam, matchStatusLabel } from "../utils";
+import { MatchFormFields } from "./MatchFormFields";
+
+type CreateMatchPayload = {
+  teamAId: string;
+  teamBId: string;
+} & CreateMatchOptions;
 
 type Props = {
   tournament: Tournament;
   onSetActive: (matchId: string) => void;
-  onCreateMatch: (teamAId: string, teamBId: string, poolId?: string) => void;
+  onCreateMatch: (payload: CreateMatchPayload) => void;
   onDeleteMatch: (matchId: string) => void;
 };
 
@@ -36,11 +43,13 @@ function MatchList({
           return (
             <li key={m.id} className={isActive ? "active" : ""}>
               <button type="button" className="match-list-btn" onClick={() => onSetActive(m.id)}>
+                {m.label && <span className="match-list-label">{m.label}</span>}
                 <span>
                   {a} vs {b}
                 </span>
                 <span className="match-meta">
-                  {pool && `${pool} · `}
+                  {m.scheduledTime && `${m.scheduledTime} · `}
+                  {pool && !m.label && `${pool} · `}
                   {m.scoreA}-{m.scoreB} · {matchStatusLabel(m.status)}
                   {m.mode === "shootout" && " · SO"}
                 </span>
@@ -69,6 +78,8 @@ export function MatchSelector({
 
   const [teamA, setTeamA] = useState(poolTeams[0]?.id ?? "");
   const [teamB, setTeamB] = useState(poolTeams[1]?.id ?? "");
+  const [label, setLabel] = useState("");
+  const [scheduledTime, setScheduledTime] = useState("");
 
   useEffect(() => {
     if (!poolTeams.find((t) => t.id === teamA)) setTeamA(poolTeams[0]?.id ?? "");
@@ -80,39 +91,58 @@ export function MatchSelector({
       <h2>Matchs</h2>
 
       {tournament.teams.length >= 2 && (
-        <div className="create-match">
-          {tournament.pools.length > 0 && (
-            <select value={poolId} onChange={(e) => setPoolId(e.target.value)}>
-              {tournament.pools.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
+        <div className="create-match-block">
+          <div className="create-match">
+            {tournament.pools.length > 0 && (
+              <select value={poolId} onChange={(e) => setPoolId(e.target.value)}>
+                {tournament.pools.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            )}
+            <select value={teamA} onChange={(e) => setTeamA(e.target.value)}>
+              {poolTeams.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
                 </option>
               ))}
             </select>
-          )}
-          <select value={teamA} onChange={(e) => setTeamA(e.target.value)}>
-            {poolTeams.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </select>
-          <span>vs</span>
-          <select value={teamB} onChange={(e) => setTeamB(e.target.value)}>
-            {poolTeams.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            className="btn btn-accent"
-            disabled={!teamA || !teamB || teamA === teamB}
-            onClick={() => onCreateMatch(teamA, teamB, poolId || undefined)}
-          >
-            Créer match
-          </button>
+            <span>vs</span>
+            <select value={teamB} onChange={(e) => setTeamB(e.target.value)}>
+              {poolTeams.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="btn btn-accent"
+              disabled={!teamA || !teamB || teamA === teamB}
+              onClick={() => {
+                onCreateMatch({
+                  teamAId: teamA,
+                  teamBId: teamB,
+                  poolId: poolId || undefined,
+                  label: label || undefined,
+                  scheduledTime: scheduledTime || undefined,
+                });
+                setLabel("");
+                setScheduledTime("");
+              }}
+            >
+              Créer match
+            </button>
+          </div>
+          <MatchFormFields
+            compact
+            label={label}
+            scheduledTime={scheduledTime}
+            onLabelChange={setLabel}
+            onScheduledTimeChange={setScheduledTime}
+          />
         </div>
       )}
 

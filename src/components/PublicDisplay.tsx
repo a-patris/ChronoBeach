@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useFullscreen } from "../hooks/useFullscreen";
 import { loadTournament } from "../storage";
 import { getRegularShotProgress, REGULAR_SHOTS_PER_TEAM, shootoutScore } from "../shootout";
@@ -38,7 +38,8 @@ function DisplayShell({
   children: ReactNode;
   className?: string;
 }) {
-  const { active, enter } = useFullscreen();
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const { active, enter } = useFullscreen(viewportRef);
 
   useEffect(() => {
     document.documentElement.classList.add("display-route");
@@ -49,7 +50,10 @@ function DisplayShell({
   }, [enter]);
 
   return (
-    <div className={`display-viewport${active ? " display-viewport--fullscreen" : ""}`}>
+    <div
+      ref={viewportRef}
+      className={`display-viewport${active ? " display-viewport--fullscreen" : ""}`}
+    >
       {!active && (
         <button
           type="button"
@@ -120,9 +124,12 @@ function MatchDisplay({ tournament, match }: { tournament: Tournament; match: Ma
   const p2 = match.periodWinners.period2
     ? getTeam(tournament, match.periodWinners.period2)?.name
     : null;
+  const isFinished = match.status === "finished";
 
   return (
-    <DisplayShell className="display-match">
+    <DisplayShell
+      className={`display-match${isFinished ? " display-match--finished" : ""}`}
+    >
       {match.timeout && (
         <TimeoutBanner tournament={tournament} timeout={match.timeout} variant="display" />
       )}
@@ -134,25 +141,38 @@ function MatchDisplay({ tournament, match }: { tournament: Tournament; match: Ma
         </span>
       </header>
 
-      <div className="display-match-body">
-        <div className="display-period">Période {match.period} / 2</div>
+      <div className="display-match-head">
+        {match.label && <h1 className="display-match-label">{match.label}</h1>}
+        <p className="display-period">
+          Période {match.period} / 2
+          {match.scheduledTime && (
+            <span className="display-match-time"> · {match.scheduledTime}</span>
+          )}
+        </p>
+      </div>
 
+      <div className="display-match-body">
         <div className="display-teams">
           <DisplayMatchTeam team={teamA} score={match.scoreA} />
 
-          <div className="display-center">
-            <section className="display-center-panel" aria-label="Chronomètre et temps morts">
-              <p className="display-timer">{formatTime(remaining)}</p>
-              <DisplayTimeoutStatus tournament={tournament} match={match} inline />
-            </section>
-          </div>
+          {!isFinished && (
+            <div className="display-center">
+              <section
+                className="display-center-panel"
+                aria-label="Chronomètre et temps morts"
+              >
+                <p className="display-timer">{formatTime(remaining)}</p>
+                <DisplayTimeoutStatus tournament={tournament} match={match} inline />
+              </section>
+            </div>
+          )}
 
           <DisplayMatchTeam team={teamB} score={match.scoreB} />
         </div>
       </div>
 
-      {(p1 || p2) && (
-        <footer className="display-match-footer">
+      <footer className="display-match-footer">
+        {(p1 || p2) && (
           <div className="display-period-winners">
             {p1 && (
               <span className="display-period-winners-chip">
@@ -167,18 +187,19 @@ function MatchDisplay({ tournament, match }: { tournament: Tournament; match: Ma
               </span>
             )}
           </div>
-        </footer>
-      )}
+        )}
 
-      {match.winnerTeamId && match.status === "finished" && (
-        <div className="display-winner display-winner--prominent display-winner--match display-winner--with-logo">
-          <span className="display-winner-kicker">Vainqueur du match</span>
-          <TeamLogo team={getTeam(tournament, match.winnerTeamId)} size="lg" />
-          <span className="display-winner-name">
-            {getTeam(tournament, match.winnerTeamId)?.name}
-          </span>
-        </div>
-      )}
+        {match.winnerTeamId && isFinished && (
+          <div className="display-winner display-winner--prominent display-winner--match display-winner--with-logo">
+            <span className="display-winner-kicker">Vainqueur du match</span>
+            <TeamLogo team={getTeam(tournament, match.winnerTeamId)} size="lg" />
+            <span className="display-winner-name">
+              {getTeam(tournament, match.winnerTeamId)?.name}
+            </span>
+          </div>
+        )}
+      </footer>
+
     </DisplayShell>
   );
 }

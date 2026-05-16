@@ -46,8 +46,10 @@ export function StandingsPage() {
                     <th>BP</th>
                     <th>BC</th>
                     <th>+/-</th>
-                    <th title="Sets gagnés (P1, P2, SO = 1 set)">Sets</th>
-                    <th title="Différentiel sets (gagnés − perdus)">Set +/-</th>
+                    <th title="Sets de période gagnés (P1 + P2)">Sets G</th>
+                    <th title="Sets de période perdus">Sets P</th>
+                    <th title="Sets gagnés au shoot-out">SO</th>
+                    <th title="Différentiel sets (périodes + shoot-out)">Set +/-</th>
                     <th>Pts</th>
                   </tr>
                 </thead>
@@ -70,12 +72,12 @@ export function StandingsPage() {
                           {row.goalDiff > 0 ? "+" : ""}
                           {row.goalDiff}
                         </td>
-                        <td>
-                          <strong>{row.setsWon}</strong>
-                        </td>
-                        <td className={row.setAverage >= 0 ? "diff-pos" : "diff-neg"}>
-                          {row.setAverage > 0 ? "+" : ""}
-                          {row.setAverage}
+                        <td>{row.periodSetsWon}</td>
+                        <td>{row.periodSetsLost}</td>
+                        <td>{row.shootoutSetsWon}</td>
+                        <td className={row.setDiff >= 0 ? "diff-pos" : "diff-neg"}>
+                          {row.setDiff > 0 ? "+" : ""}
+                          {row.setDiff}
                         </td>
                         <td>
                           <strong>{row.points}</strong>
@@ -91,8 +93,8 @@ export function StandingsPage() {
       })}
 
       <p className="hint">
-        Matchs terminés · 2 pts par victoire · BP/BC = buts sur les périodes · Sets = sets gagnés
-        (P1, P2, shoot-out = 1 set) · Set +/- = différentiel sets.
+        Matchs terminés · 2 pts par victoire · Départage auto : points → sets avg global → GA
+        global. Égalité parfaite : à trancher manuellement.
       </p>
     </main>
   );

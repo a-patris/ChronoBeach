@@ -225,8 +225,13 @@ export function AdminPanel() {
             onSetActive={(id) =>
               setTournament((prev) => (prev ? { ...prev, activeMatchId: id } : prev))
             }
-            onCreateMatch={(teamAId, teamBId, poolId) => {
-              const m = createMatch(teamAId, teamBId, 600, poolId);
+            onCreateMatch={({ teamAId, teamBId, poolId, label, scheduledTime, sortOrder }) => {
+              const m = createMatch(teamAId, teamBId, 600, {
+                poolId,
+                label,
+                scheduledTime,
+                sortOrder,
+              });
               setTournament((prev) =>
                 prev
                   ? {
@@ -258,7 +263,13 @@ export function AdminPanel() {
           ) : (
             <>
               <TimeoutBanner tournament={tournament} timeout={match.timeout} />
-              <MatchInfo tournament={tournament} match={match} />
+              <MatchInfo
+                tournament={tournament}
+                match={match}
+                onUpdateMatch={(patch) =>
+                  patchMatch((m) => ({ ...m, ...patch }))
+                }
+              />
               {match.mode === "match" && (
                 <PeriodScoresPanel tournament={tournament} match={match} />
               )}

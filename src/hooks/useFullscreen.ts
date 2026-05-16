@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type RefObject } from "react";
 
-export function useFullscreen() {
+export function useFullscreen(targetRef?: RefObject<HTMLElement | null>) {
   const [active, setActive] = useState(
     () => typeof document !== "undefined" && !!document.fullscreenElement,
   );
@@ -12,10 +12,10 @@ export function useFullscreen() {
   }, []);
 
   const enter = useCallback(async () => {
-    if (!document.fullscreenElement) {
-      await document.documentElement.requestFullscreen();
-    }
-  }, []);
+    if (document.fullscreenElement) return;
+    const el = targetRef?.current ?? document.documentElement;
+    await el.requestFullscreen();
+  }, [targetRef]);
 
   const exit = useCallback(async () => {
     if (document.fullscreenElement) {

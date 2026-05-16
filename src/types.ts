@@ -70,6 +70,12 @@ export type Match = {
   teamAId: string;
   teamBId: string;
   poolId?: string;
+  /** Titre affiché (ex. Grande finale, Phase haute). */
+  label?: string;
+  /** Heure prévue affichée (ex. 09H30). */
+  scheduledTime?: string;
+  /** Ordre dans la liste des matchs. */
+  sortOrder?: number;
 
   mode: MatchMode;
 
@@ -126,9 +132,32 @@ export type TeamStanding = {
   goalsFor: number;
   goalsAgainst: number;
   goalDiff: number;
-  /** Sets gagnés (P1 + P2 + shoot-out si applicable). */
-  setsWon: number;
-  setsLost: number;
-  setAverage: number;
+  /** Sets de période gagnés (P1 + P2). */
+  periodSetsWon: number;
+  periodSetsLost: number;
+  /** Sets au shoot-out (0 ou 1 par match). */
+  shootoutSetsWon: number;
+  shootoutSetsLost: number;
+  /** Différentiel total sets (gagnés − perdus, périodes + SO). */
+  setDiff: number;
+  points: number;
+};
+
+/** Stats confrontations directes (départage si égalité générale). */
+export type HeadToHeadStats = {
+  teamId: string;
+  played: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  goalDiff: number;
+  /** Buts marqués / buts encaissés (confrontations directes). */
+  goalAverage: number | null;
+  periodSetsWon: number;
+  periodSetsLost: number;
+  shootoutSetsWon: number;
+  shootoutSetsLost: number;
+  setDiff: number;
+  /** Sets gagnés / sets perdus (confrontations directes). */
+  setAverage: number | null;
   points: number;
 };
