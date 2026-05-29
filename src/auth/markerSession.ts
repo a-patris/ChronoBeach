@@ -3,6 +3,7 @@ import { signInAnonymously, signOut } from "firebase/auth";
 import { getFirebaseAuth } from "../config/firebaseApp";
 import { getFirestoreDb } from "../config/firebaseApp";
 import { lookupAccessCode, normalizeAccessCode } from "./accessCodes";
+import { tournamentLiveEnabled, LIVE_BLOCKED_PUBLIC_MESSAGE } from "./billing";
 
 const STORAGE_KEY = "cb_marker_access";
 
@@ -61,7 +62,12 @@ export async function joinWithMarkerCode(code: string): Promise<string> {
     throw new Error("Tournoi introuvable.");
   }
 
-  const access = tournamentSnap.data().access as { markerCode?: string } | undefined;
+  const tournamentData = tournamentSnap.data();
+  if (!tournamentLiveEnabled({ liveEnabled: tournamentData.liveEnabled as boolean | undefined })) {
+    throw new Error(LIVE_BLOCKED_PUBLIC_MESSAGE);
+  }
+
+  const access = tournamentData.access as { markerCode?: string } | undefined;
   const expected = normalizeAccessCode(access?.markerCode ?? "");
   const provided = normalizeAccessCode(code);
   if (!expected || expected !== provided) {
@@ -90,5 +96,17 @@ export async function resolveSpectatorTournamentId(code: string): Promise<string
   if (!lookup || lookup.type !== "spectator") {
     throw new Error("Code spectateur invalide.");
   }
+
+  const tournamentSnap = await getDoc(
+    doc(getFirestoreDb(), "tournaments", lookup.tournamentId),
+  );
+  if (!tournamentSnap.exists()) {
+    throw new Error("Tournoi introuvable.");
+  }
+  const data = tournamentSnap.data();
+  if (!tournamentLiveEnabled({ liveEnabled: data.liveEnabled as boolean | undefined })) {
+    throw new Error(LIVE_BLOCKED_PUBLIC_MESSAGE);
+  }
+
   return lookup.tournamentId;
 }

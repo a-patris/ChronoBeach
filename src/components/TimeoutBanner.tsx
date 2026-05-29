@@ -1,6 +1,7 @@
 import type { Tournament } from "../types";
 import type { TimeoutState } from "../types";
 import { computeTimeoutRemaining, formatTime, getTeam } from "../utils";
+import { useClockTick } from "../hooks/useClockTick";
 import { TeamLogo } from "./TeamLogo";
 
 type Props = {
@@ -15,7 +16,8 @@ export function TimeoutBanner({ tournament, timeout, variant = "admin" }: Props)
   const team = getTeam(tournament, timeout.teamId);
   if (!team) return null;
 
-  const remaining = computeTimeoutRemaining(timeout);
+  const now = useClockTick(1000, timeout.timer.running);
+  const remaining = computeTimeoutRemaining(timeout, now);
 
   return (
     <div className={`timeout-banner timeout-${variant}`}>

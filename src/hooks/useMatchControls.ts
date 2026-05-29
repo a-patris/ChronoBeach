@@ -4,6 +4,7 @@ import {
   useTournamentContext,
 } from "../context/TournamentContext";
 import { useWorkspaceMatchId } from "../context/WorkspaceContext";
+import { useGoLiveAccess } from "./useGoLiveAccess";
 import {
   canStartShootout,
   computeRemainingSeconds,
@@ -33,6 +34,7 @@ export function useMatchControls(options: Options = {}) {
     options.matchId ?? workspaceMatchId ?? tournament?.activeMatchId ?? null;
 
   const match = useMatchById(tournament, effectiveMatchId);
+  const { canGoLive, notifyBlocked } = useGoLiveAccess(tournament);
 
   const patchMatch = useCallback(
     (updater: (m: Match) => Match) => {
@@ -50,25 +52,38 @@ export function useMatchControls(options: Options = {}) {
     [setTournament, effectiveMatchId],
   );
 
+  const guardLive = useCallback(
+    (action: () => void) => {
+      if (!canGoLive) {
+        notifyBlocked();
+        return;
+      }
+      action();
+    },
+    [canGoLive, notifyBlocked],
+  );
+
   const handleScore = useCallback(
     (team: "A" | "B", delta: number) => {
-      patchMatch((m) => applyScoreChange(m, team, delta));
+      guardLive(() => patchMatch((m) => applyScoreChange(m, team, delta)));
     },
-    [patchMatch],
+    [guardLive, patchMatch],
   );
 
   const handleTimerStart = useCallback(() => {
-    patchMatch((m) => ({
-      ...m,
-      status:
-        m.status === "ready" ? "running" : m.status === "paused" ? "running" : m.status,
-      timer: {
-        running: true,
-        startedAt: Date.now(),
-        remainingAtStart: computeRemainingSeconds(m),
-      },
-    }));
-  }, [patchMatch]);
+    guardLive(() =>
+      patchMatch((m) => ({
+        ...m,
+        status:
+          m.status === "ready" ? "running" : m.status === "paused" ? "running" : m.status,
+        timer: {
+          running: true,
+          startedAt: Date.now(),
+          remainingAtStart: computeRemainingSeconds(m),
+        },
+      })),
+    );
+  }, [guardLive, patchMatch]);
 
   const handleTimerPause = useCallback(() => {
     patchMatch((m) => ({
@@ -89,6 +104,10 @@ export function useMatchControls(options: Options = {}) {
           timer: { running: false },
         };
       }
+      if (!canGoLive) {
+        notifyBlocked();
+        return m;
+      }
       return {
         ...m,
         status: m.status === "ready" ? "running" : m.status === "paused" ? "running" : m.status,
@@ -99,50 +118,56 @@ export function useMatchControls(options: Options = {}) {
         },
       };
     });
-  }, [patchMatch]);
+  }, [patchMatch, canGoLive, notifyBlocked]);
 
   const handleTimeout = useCallback(
     (teamId: string) => {
-      patchMatch((m) => applyTeamTimeout(m, teamId) ?? m);
+      guardLive(() => patchMatch((m) => applyTeamTimeout(m, teamId) ?? m));
     },
-    [patchMatch],
+    [guardLive, patchMatch],
   );
 
   const endPeriod = useCallback(() => {
-    patchMatch((m) => endPeriodWithRules(m));
-  }, [patchMatch]);
+    guardLive(() => patchMatch((m) => endPeriodWithRules(m)));
+  }, [guardLive, patchMatch]);
 
   const nextPeriod = useCallback(() => {
-    patchMatch((m) => advanceToNextPeriodWithRules(m));
-  }, [patchMatch]);
+    guardLive(() => patchMatch((m) => advanceToNextPeriodWithRules(m)));
+  }, [guardLive, patchMatch]);
 
   const setPeriodWinner = useCallback(
     (period: 1 | 2, teamId: string) => {
-      const key = period === 1 ? "period1" : "period2";
-      patchMatch((m) => ({
-        ...m,
-        periodWinners: { ...m.periodWinners, [key]: teamId },
-      }));
+      guardLive(() => {
+        const key = period === 1 ? "period1" : "period2";
+        patchMatch((m) => ({
+          ...m,
+          periodWinners: { ...m.periodWinners, [key]: teamId },
+        }));
+      });
     },
-    [patchMatch],
+    [guardLive, patchMatch],
   );
 
   const finishMatch = useCallback(() => {
-    patchMatch((m) => {
-      if (!canFinishMatch(m)) return m;
-      return finishMatchWithRules(m);
-    });
-  }, [patchMatch]);
+    guardLive(() =>
+      patchMatch((m) => {
+        if (!canFinishMatch(m)) return m;
+        return finishMatchWithRules(m);
+      }),
+    );
+  }, [guardLive, patchMatch]);
 
   const startShootout = useCallback(() => {
-    patchMatch((m) => ({
-      ...m,
-      mode: "shootout",
-      status: "running",
-      timer: { running: false },
-      shootout: createShootout(m.teamAId, m.teamBId),
-    }));
-  }, [patchMatch]);
+    guardLive(() =>
+      patchMatch((m) => ({
+        ...m,
+        mode: "shootout",
+        status: "running",
+        timer: { running: false },
+        shootout: createShootout(m.teamAId, m.teamBId),
+      })),
+    );
+  }, [guardLive, patchMatch]);
 
   const teamA = match && tournament ? getTeam(tournament, match.teamAId) : undefined;
   const teamB = match && tournament ? getTeam(tournament, match.teamBId) : undefined;
@@ -155,6 +180,8 @@ export function useMatchControls(options: Options = {}) {
     setTournament,
     teamA,
     teamB,
+    canGoLive,
+    notifyBlocked,
     handleScore,
     handleTimerStart,
     handleTimerPause,

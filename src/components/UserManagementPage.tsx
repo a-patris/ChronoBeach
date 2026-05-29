@@ -5,6 +5,8 @@ import {
   createUserAccount,
   createUserCreationErrorMessage,
   listUserProfiles,
+  updateUserBillingStatus,
+  type BillingStatus,
 } from "../auth/userService";
 import {
   canCreateRole,
@@ -13,18 +15,26 @@ import {
   type UserProfile,
   type UserRole,
 } from "../auth/roles";
+import {
+  BILLING_STATUSES,
+  billingStatusLabel,
+  normalizeBillingStatus,
+} from "../auth/billing";
+import { ActivationRequestsPanel } from "./ActivationRequestsPanel";
 
 export function UserManagementPage() {
-  const { user, role, profileLoading, authRequired, canManageUsers } = useAuth();
+  const { user, role, profileLoading, authRequired, canManageUsers, isSuperAdmin } = useAuth();
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [newRole, setNewRole] = useState<UserRole>("tournament_manager");
+  const [newBillingStatus, setNewBillingStatus] = useState<BillingStatus>("discovery");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [updatingUid, setUpdatingUid] = useState<string | null>(null);
 
   const allowedRoles = creatableRoles(role);
 
@@ -66,12 +76,15 @@ export function UserManagementPage() {
     setSuccess(null);
     setSubmitting(true);
     try {
+      const billingStatus =
+        newRole === "tournament_manager" ? newBillingStatus : ("active" as BillingStatus);
       const created = await createUserAccount(
         user.uid,
         email,
         password,
         displayName,
         newRole,
+        billingStatus,
       );
       setUsers((prev) =>
         [...prev, created].sort((a, b) => a.displayName.localeCompare(b.displayName, "fr")),
@@ -90,8 +103,25 @@ export function UserManagementPage() {
     }
   };
 
+  const handleBillingChange = async (uid: string, billingStatus: BillingStatus) => {
+    if (!isSuperAdmin) return;
+    setUpdatingUid(uid);
+    try {
+      await updateUserBillingStatus(uid, billingStatus);
+      setUsers((prev) =>
+        prev.map((u) => (u.uid === uid ? { ...u, billingStatus } : u)),
+      );
+    } catch {
+      window.alert("Impossible de mettre à jour le statut commercial.");
+    } finally {
+      setUpdatingUid(null);
+    }
+  };
+
   return (
     <main className="page home-page home-page--users">
+      <ActivationRequestsPanel />
+
       <section className="panel">
         <Link to="/" className="hint home-back-link">
           ← Accueil
@@ -99,7 +129,7 @@ export function UserManagementPage() {
         <h1>Gestion des comptes</h1>
         <p className="hint">
           {role === "super_admin"
-            ? "Créez des administrateurs ou des responsables de tournoi."
+            ? "Créez des administrateurs ou des responsables de tournoi. Le statut « Découverte » permet de configurer sans lancer le direct."
             : "Créez des responsables de tournoi pour vos événements."}
         </p>
       </section>
@@ -121,6 +151,23 @@ export function UserManagementPage() {
               ))}
             </select>
           </label>
+          {isSuperAdmin && newRole === "tournament_manager" && (
+            <label className="auth-field">
+              <span>Statut commercial</span>
+              <select
+                value={newBillingStatus}
+                onChange={(e) =>
+                  setNewBillingStatus(normalizeBillingStatus(e.target.value))
+                }
+              >
+                {BILLING_STATUSES.map((s) => (
+                  <option key={s} value={s}>
+                    {billingStatusLabel(s)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <label className="auth-field">
             <span>Nom affiché</span>
             <input
@@ -175,7 +222,31 @@ export function UserManagementPage() {
                   <strong>{u.displayName}</strong>
                   <span className="hint user-list-email">{u.email}</span>
                 </div>
-                <span className="user-role-badge">{roleLabel(u.role)}</span>
+                <div className="user-list-meta">
+                  <span className="user-role-badge">{roleLabel(u.role)}</span>
+                  {isSuperAdmin && u.role === "tournament_manager" ? (
+                    <select
+                      className="user-billing-select"
+                      value={u.billingStatus ?? "discovery"}
+                      disabled={updatingUid === u.uid}
+                      onChange={(e) =>
+                        void handleBillingChange(u.uid, normalizeBillingStatus(e.target.value))
+                      }
+                    >
+                      {BILLING_STATUSES.map((s) => (
+                        <option key={s} value={s}>
+                          {billingStatusLabel(s)}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    u.billingStatus && (
+                      <span className="user-billing-badge">
+                        {billingStatusLabel(u.billingStatus)}
+                      </span>
+                    )
+                  )}
+                </div>
               </li>
             ))}
           </ul>

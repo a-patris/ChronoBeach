@@ -1,3 +1,5 @@
+import type { BillingStatus } from "./billing";
+
 /** Rôles globaux (collection Firestore `users`). */
 export type UserRole = "super_admin" | "admin" | "tournament_manager";
 
@@ -6,6 +8,8 @@ export type UserProfile = {
   email: string;
   displayName: string;
   role: UserRole;
+  /** Statut commercial — défaut « discovery » pour les organisateurs. */
+  billingStatus?: BillingStatus;
   createdAt?: string;
   createdBy?: string;
   /** true après création par un admin — changement obligatoire au 1er login. */

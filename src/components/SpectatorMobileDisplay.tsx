@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { getTournamentRepository } from "../data/tournamentRepository";
 import { useDisplayEventQueue } from "../hooks/useDisplayEventQueue";
+import { useClockTick } from "../hooks/useClockTick";
 import { getRegularShotProgress, REGULAR_SHOTS_PER_TEAM, shootoutScore } from "../shootout";
 import { spectatorHubPath } from "../routes/paths";
 import { DisplayEventOverlay } from "./DisplayEventOverlay";
@@ -16,6 +17,8 @@ import {
   shotResultIcon,
 } from "../utils";
 import type { Match, Tournament } from "../types";
+import { tournamentLiveEnabled } from "../auth/billing";
+import { LiveLaunchGate } from "./LiveLaunchGate";
 
 function SpectatorMobileShell({
   tournament,
@@ -109,7 +112,8 @@ function SpectatorMatchView({
 }) {
   const teamA = getTeam(tournament, match.teamAId);
   const teamB = getTeam(tournament, match.teamBId);
-  const remaining = computeRemainingSeconds(match);
+  const now = useClockTick(1000, match.timer.running || !!match.timeout?.timer.running);
+  const remaining = computeRemainingSeconds(match, now);
   const highlight = useDisplayEventQueue(tournament, match);
   const highlightTeam =
     highlight?.teamSide === "A" ? teamA : highlight?.teamSide === "B" ? teamB : undefined;
@@ -256,6 +260,17 @@ export function SpectatorMobileDisplay() {
           Retour
         </Link>
       </main>
+    );
+  }
+
+  if (!tournamentLiveEnabled(tournament)) {
+    return (
+      <LiveLaunchGate
+        tournamentName={tournament.name}
+        variant="public"
+        backTo="/join/spectator"
+        backLabel="Changer de code"
+      />
     );
   }
 

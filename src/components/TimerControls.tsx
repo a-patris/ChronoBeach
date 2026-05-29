@@ -1,4 +1,5 @@
-import { formatTime } from "../utils";
+import { formatTime, computeRemainingSeconds } from "../utils";
+import { useClockTick } from "../hooks/useClockTick";
 import type { Match } from "../types";
 
 type Props = {
@@ -33,11 +34,13 @@ export function TimerControls({
   onCancelTimeout,
 }: Props) {
   const durationMin = Math.floor(match.durationSeconds / 60);
+  const now = useClockTick(1000, match.timer.running);
+  const remaining = computeRemainingSeconds(match, now);
 
   return (
     <section className="panel timer-controls">
       <h2>Chrono</h2>
-      <p className="timer-display">{formatTime(match.remainingSeconds)}</p>
+      <p className="timer-display">{formatTime(remaining)}</p>
       <label className="field-inline">
         Durée (min)
         <input

@@ -1,0 +1,17 @@
+{
+  "name": "chronobeach-functions",
+  "description": "Notifications e-mail (demandes d'activation)",
+  "main": "index.js",
+  "type": "commonjs",
+  "engines": {
+    "node": "20"
+  },
+  "scripts": {
+    "serve": "firebase emulators:start --only functions",
+    "deploy": "firebase deploy --only functions"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.7.0",
+    "firebase-functions": "^4.9.0"
+  }
+}

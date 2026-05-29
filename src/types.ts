@@ -273,6 +273,8 @@ export type Tournament = {
   createdAt?: string;
   /** Codes d'accès rapide table de marque / spectateurs. */
   access?: TournamentAccess;
+  /** Dénormalisé depuis le statut commercial de l'organisateur (accès public live). */
+  liveEnabled?: boolean;
 };
 
 export type TournamentAccess = {

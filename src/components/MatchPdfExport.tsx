@@ -1,5 +1,6 @@
 import type { Match, Team, Tournament } from "../types";
 import { ensureMatchSheet } from "../matchSheet";
+import { useGoLiveAccess } from "../hooks/useGoLiveAccess";
 
 type Props = {
   tournament: Tournament;
@@ -18,13 +19,16 @@ export function MatchPdfExport({
 }: Props) {
   const sheet = ensureMatchSheet(match);
   const hasReports = (sheet.disciplineReports ?? []).length > 0;
+  const { canGoLive, notifyBlocked } = useGoLiveAccess(tournament);
 
   const handleSheetExport = async () => {
+    if (!canGoLive) return notifyBlocked();
     const { exportMatchSheetPdf } = await import("../export/matchSheetPdf");
     exportMatchSheetPdf(tournament, match, teamA, teamB);
   };
 
   const handleReportExport = async () => {
+    if (!canGoLive) return notifyBlocked();
     const { exportDisciplineReportPdf } = await import("../export/disciplineReportPdf");
     exportDisciplineReportPdf(tournament, match, teamA, teamB);
   };
@@ -35,19 +39,26 @@ export function MatchPdfExport({
         type="button"
         className="btn btn-outline btn-sm pdf-export-btn"
         onClick={() => void handleSheetExport()}
-        title="Export PDF feuille de match (FDME beach)"
+        disabled={!canGoLive}
+        title={
+          canGoLive
+            ? "Export PDF feuille de match (FDME beach)"
+            : "Disponible après activation de l'abonnement"
+        }
       >
         PDF feuille
       </button>
       <button
         type="button"
         className="btn btn-outline btn-sm pdf-export-btn pdf-export-btn--report"
-        disabled={!hasReports}
+        disabled={!hasReports || !canGoLive}
         onClick={() => void handleReportExport()}
         title={
-          hasReports
-            ? "Export PDF rapport de discipline (carton bleu)"
-            : "Aucun rapport de discipline saisi"
+          !canGoLive
+            ? "Disponible après activation de l'abonnement"
+            : hasReports
+              ? "Export PDF rapport de discipline (carton bleu)"
+              : "Aucun rapport de discipline saisi"
         }
       >
         PDF rapport

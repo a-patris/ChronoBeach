@@ -15,7 +15,8 @@ import {
 } from "firebase/auth";
 import { getFirebaseAuth } from "../config/firebaseApp";
 import { isFirebaseConfigured } from "../config/firebase";
-import { resolveAuthProfile, completePasswordSetup as saveNewPassword } from "../auth/userService";
+import { resolveAuthProfile, completePasswordSetup as saveNewPassword, registerDiscoveryAccount } from "../auth/userService";
+import { setBillingContext } from "../auth/billingContext";
 import {
   canManageUsers,
   isPlatformStaff,
@@ -23,6 +24,7 @@ import {
   type UserProfile,
   type UserRole,
 } from "../auth/roles";
+import { canGoLive } from "../auth/billing";
 
 type AuthContextValue = {
   user: User | null;
@@ -37,7 +39,10 @@ type AuthContextValue = {
   authRequired: boolean;
   accessDenied: string | null;
   mustChangePassword: boolean;
+  canGoLive: boolean;
+  isDiscoveryMode: boolean;
   signIn: (email: string, password: string) => Promise<void>;
+  signUpDiscovery: (email: string, password: string, displayName: string) => Promise<void>;
   signOutUser: () => Promise<void>;
   completePasswordSetup: (password: string) => Promise<void>;
 };
@@ -58,6 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setProfile(null);
       setRole(null);
       setAccessDenied(null);
+      setBillingContext(undefined, null);
       return;
     }
 
@@ -65,6 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setProfile(null);
       setRole(null);
       setAccessDenied(null);
+      setBillingContext(undefined, null);
       setProfileLoading(false);
       return;
     }
@@ -74,6 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const resolved = await resolveAuthProfile(next);
       setProfile(resolved.profile);
       setRole(resolved.role);
+      setBillingContext(resolved.profile?.billingStatus, resolved.role);
       setAccessDenied(
         resolved.role ? null : "Compte non autorisé. Contactez l'administrateur ChronoBeach.",
       );
@@ -86,6 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           role: "super_admin",
         });
         setRole("super_admin");
+        setBillingContext("active", "super_admin");
         setAccessDenied(null);
         return;
       }
@@ -123,11 +132,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await loadProfile(cred.user);
   }, [loadProfile]);
 
+  const signUpDiscovery = useCallback(
+    async (email: string, password: string, displayName: string) => {
+      setAccessDenied(null);
+      setProfileLoading(true);
+      try {
+        await registerDiscoveryAccount(email, password, displayName);
+        const auth = getFirebaseAuth();
+        if (auth.currentUser) await loadProfile(auth.currentUser);
+      } finally {
+        setProfileLoading(false);
+      }
+    },
+    [loadProfile],
+  );
+
   const signOutUser = useCallback(async () => {
     await signOut(getFirebaseAuth());
     setProfile(null);
     setRole(null);
     setAccessDenied(null);
+    setBillingContext(undefined, null);
   }, []);
 
   const completePasswordSetup = useCallback(
@@ -140,6 +165,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const mustChangePassword = profile?.mustChangePassword === true;
+  const userCanGoLive = canGoLive(profile?.billingStatus, role);
+  const isDiscoveryMode =
+    authRequired && role === "tournament_manager" && profile?.billingStatus === "discovery";
 
   const isSuperAdmin = role === "super_admin";
   const platformStaff = isPlatformStaff(role);
@@ -159,7 +187,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       authRequired,
       accessDenied,
       mustChangePassword,
+      canGoLive: userCanGoLive,
+      isDiscoveryMode,
       signIn,
+      signUpDiscovery,
       signOutUser,
       completePasswordSetup,
     }),
@@ -175,7 +206,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       authRequired,
       accessDenied,
       mustChangePassword,
+      userCanGoLive,
+      isDiscoveryMode,
       signIn,
+      signUpDiscovery,
       signOutUser,
       completePasswordSetup,
     ],

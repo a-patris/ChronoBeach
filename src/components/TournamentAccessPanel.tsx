@@ -5,11 +5,13 @@ import {
   canManageTournament,
   isPlatformStaff,
 } from "../auth/roles";
+import { useGoLiveAccess } from "../hooks/useGoLiveAccess";
 import {
   formatAccessCode,
   regenerateTournamentAccess,
 } from "../auth/accessCodes";
 import { isFirebaseConfigured } from "../config/firebase";
+import { ContactActivationCta } from "./ContactActivationCta";
 import type { Tournament } from "../types";
 
 type Props = {
@@ -19,6 +21,7 @@ type Props = {
 export function TournamentAccessPanel({ tournament }: Props) {
   const { setTournament } = useTournamentContext();
   const { user, role } = useAuth();
+  const { canGoLive } = useGoLiveAccess(tournament);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
 
@@ -69,6 +72,21 @@ export function TournamentAccessPanel({ tournament }: Props) {
         Partagez ces codes sur place : table de marque (tablette / PC) et suivi spectateur
         (buette, public).
       </p>
+      {!canGoLive && (
+        <>
+          <p className="hint discovery-access-hint" role="status">
+            Les codes seront actifs une fois votre abonnement activé. En mode découverte, la
+            tablette et le suivi spectateur restent indisponibles.
+          </p>
+          <ContactActivationCta
+            userName={user?.displayName ?? undefined}
+            userEmail={user?.email ?? undefined}
+            tournamentName={tournament.name}
+            tournamentId={tournament.id}
+            variant="compact"
+          />
+        </>
+      )}
 
       <div className="access-code-grid">
         <div className="access-code-card">

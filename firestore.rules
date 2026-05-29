@@ -61,11 +61,23 @@ service cloud.firestore {
       return exists(/databases/$(database)/documents/tournaments/$(tId)/markerSessions/$(request.auth.uid));
     }
 
+    function tournamentLiveEnabled(tId) {
+      return tournamentDoc(tId).data.liveEnabled != false;
+    }
+
     match /users/{userId} {
       allow read: if isSignedIn() && (request.auth.uid == userId || isPlatformStaff());
 
       // Premier login super admin (doc users/{uid} pas encore créé)
       allow create, update: if request.auth.uid == userId && isBootstrapSuperAdmin();
+
+      // Inscription libre — mode découverte (sandbox visiteur)
+      allow create: if request.auth.uid == userId &&
+        !exists(/databases/$(database)/documents/users/$(userId)) &&
+        request.resource.data.role == "tournament_manager" &&
+        request.resource.data.billingStatus == "discovery" &&
+        request.resource.data.email == request.auth.token.email &&
+        request.resource.data.selfRegistered == true;
 
       // Super admin / admin créent des comptes pour d'autres
       allow create: if isSuperAdmin() ||
@@ -73,6 +85,10 @@ service cloud.firestore {
 
       allow update, delete: if isSuperAdmin() ||
         (isAdmin() && resource.data.role == "tournament_manager");
+
+      allow update: if isSuperAdmin() &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(["billingStatus", "updatedAt"]);
 
       // 1er login : l'utilisateur désactive mustChangePassword sur son propre doc
       allow update: if request.auth.uid == userId &&
@@ -97,6 +113,14 @@ service cloud.firestore {
       );
     }
 
+    match /tournamentSummaries/{tournamentId} {
+      allow get, list: if isTournamentManager();
+      allow create, update: if canManageTournament(tournamentId) ||
+        hasMarkerSession(tournamentId) ||
+        (isTournamentManager() && request.resource.data.managerUid == request.auth.uid);
+      allow delete: if canManageTournament(tournamentId);
+    }
+
     match /tournaments/{tournamentId} {
       allow get: if true;
       allow list: if isTournamentManager();
@@ -109,9 +133,32 @@ service cloud.firestore {
       match /markerSessions/{sessionId} {
         allow create: if isSignedIn() &&
           request.auth.uid == sessionId &&
+          tournamentLiveEnabled(tournamentId) &&
           request.resource.data.markerCode == tournamentDoc(tournamentId).data.access.markerCode;
         allow read: if request.auth.uid == sessionId || canManageTournament(tournamentId);
       }
+    }
+
+    match /activationRequests/{requestId} {
+      allow create: if isSignedIn() &&
+        request.resource.data.uid == request.auth.uid &&
+        request.resource.data.status == "pending" &&
+        request.resource.data.email == request.auth.token.email;
+
+      allow get: if isPlatformStaff() ||
+        (isSignedIn() && resource.data.uid == request.auth.uid);
+
+      allow list: if isPlatformStaff();
+
+      allow update: if isPlatformStaff() &&
+        request.resource.data.uid == resource.data.uid &&
+        request.resource.data.email == resource.data.email &&
+        request.resource.data.createdAt == resource.data.createdAt;
+    }
+
+    // Écriture réservée aux Cloud Functions (Trigger Email)
+    match /mail/{mailId} {
+      allow read, write: if false;
     }
   }
 }

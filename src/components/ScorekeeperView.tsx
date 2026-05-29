@@ -34,12 +34,15 @@ import {
   getTeam,
   matchStatusLabel,
 } from "../utils";
+import { useClockTick } from "../hooks/useClockTick";
 import type { ShotResult } from "../types";
 import { GoldenGoalBanner } from "./GoldenGoalBanner";
 import { TimeoutBanner } from "./TimeoutBanner";
 import { TeamLogo } from "./TeamLogo";
 import { DisciplineReportPanel } from "./DisciplineReportPanel";
 import { MatchPdfExport } from "./MatchPdfExport";
+import { ContactActivationCta } from "./ContactActivationCta";
+import { useAuth } from "../context/AuthContext";
 
 type SelectedSubject =
   | { kind: "player"; teamId: string; playerId: string; side: "A" | "B" }
@@ -62,6 +65,7 @@ type Props = {
   canStartShootout: boolean;
   canTimeoutA: boolean;
   canTimeoutB: boolean;
+  liveLocked?: boolean;
   extraHeader?: import("react").ReactNode;
 };
 
@@ -395,10 +399,13 @@ export function ScorekeeperView({
   canStartShootout,
   canTimeoutA,
   canTimeoutB,
+  liveLocked = false,
   extraHeader,
 }: Props) {
   const [selected, setSelected] = useState<SelectedSubject | null>(null);
-  const remaining = computeRemainingSeconds(match);
+  const { user, profile } = useAuth();
+  const now = useClockTick(1000, match.timer.running || !!match.timeout?.timer.running);
+  const remaining = computeRemainingSeconds(match, now);
 
   useEffect(() => {
     if (!selected || selected.kind !== "player") return;
@@ -550,11 +557,25 @@ export function ScorekeeperView({
           </button>
           <button
             type="button"
-            className={`sk-start${match.timer.running ? " sk-start--pause" : ""}`}
+            className={`sk-start${match.timer.running ? " sk-start--pause" : ""}${liveLocked ? " sk-start--locked" : ""}`}
             onClick={onTimerToggle}
           >
             {match.timer.running ? "PAUSE" : "START"}
           </button>
+          {liveLocked && (
+            <div className="sk-live-locked-block">
+              <p className="sk-live-locked-hint">
+                Vous pourrez lancer votre tournoi une fois abonné.
+              </p>
+              <ContactActivationCta
+                userName={profile?.displayName ?? user?.displayName ?? undefined}
+                userEmail={user?.email ?? undefined}
+                tournamentName={tournament.name}
+                tournamentId={tournament.id}
+                variant="inline"
+              />
+            </div>
+          )}
           <span className="sk-status">{matchStatusLabel(match.status)}</span>
         </div>
 

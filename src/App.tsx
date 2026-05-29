@@ -21,18 +21,21 @@ import { AuthGate } from "./components/AuthGate";
 import { useAuth } from "./context/AuthContext";
 import { HomePage } from "./components/HomePage";
 import { UserManagementPage } from "./components/UserManagementPage";
+import { usePendingActivationCount } from "./components/ActivationRequestsPanel";
 import { JoinHubPage } from "./components/JoinHubPage";
 import { MarkerJoinPage } from "./components/MarkerJoinPage";
 import { SpectatorJoinPage } from "./components/SpectatorJoinPage";
 import { SpectatorHubPage } from "./components/SpectatorHubPage";
 import { SpectatorMobileDisplay } from "./components/SpectatorMobileDisplay";
 import { isFirebaseConfigured } from "./config/firebase";
+import { APP_NAME } from "./config/brand";
 import { useRemoteTournamentSync } from "./hooks/useRemoteTournamentSync";
 
 function NavBar() {
   const location = useLocation();
   const { tournament } = useTournamentContext();
-  const { authRequired, user, signOutUser, canManageUsers } = useAuth();
+  const { authRequired, user, signOutUser, canManageUsers, isPlatformStaff } = useAuth();
+  const pendingRequests = usePendingActivationCount();
   const isKiosk =
     location.pathname.includes("/display") || location.pathname.includes("/tablet/");
 
@@ -41,7 +44,7 @@ function NavBar() {
   return (
     <nav className="app-nav">
       <Link to="/" className="nav-brand">
-        ChronoBeach
+        {APP_NAME}
       </Link>
       <div className="nav-links">
         <Link to="/">Accueil</Link>
@@ -54,7 +57,14 @@ function NavBar() {
         )}
         {authRequired && user && (
           <>
-            {canManageUsers && <Link to="/users">Comptes</Link>}
+            {canManageUsers && (
+              <Link to="/users" className="nav-users-link">
+                Comptes
+                {isPlatformStaff && pendingRequests > 0 && (
+                  <span className="nav-badge">{pendingRequests}</span>
+                )}
+              </Link>
+            )}
             <button type="button" className="nav-link-btn" onClick={() => void signOutUser()}>
               Déconnexion
             </button>
@@ -78,7 +88,7 @@ function ScopedNavBar() {
   return (
     <nav className="app-nav app-nav--scoped">
       <Link to={tournamentPath(tournamentId, "admin")} className="nav-brand">
-        {tournament?.name ?? "ChronoBeach"}
+        {tournament?.name ?? APP_NAME}
       </Link>
       <div className="nav-links">
         <Link to="/">Accueil</Link>

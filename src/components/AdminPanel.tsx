@@ -1,3 +1,4 @@
+import { useCallback } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { useTournamentContext } from "../context/TournamentContext";
 import { useMatchControls } from "../hooks/useMatchControls";
@@ -12,6 +13,7 @@ import { tournamentPath } from "../routes/paths";
 import { MatchSelector } from "./MatchSelector";
 import { MatchSheetSetup } from "./MatchSheetSetup";
 import { ScorekeeperView } from "./ScorekeeperView";
+import type { Match } from "../types";
 
 export function AdminPanel() {
   const { tournament, setTournament } = useTournamentContext();
@@ -29,7 +31,20 @@ export function AdminPanel() {
     canStartShootout,
     canTimeoutA,
     canTimeoutB,
+    canGoLive,
+    notifyBlocked,
   } = useMatchControls();
+
+  const guardLivePatch = useCallback(
+    (updater: (m: Match) => Match) => {
+      if (!canGoLive) {
+        notifyBlocked();
+        return;
+      }
+      patchMatch(updater);
+    },
+    [canGoLive, notifyBlocked, patchMatch],
+  );
 
   if (!tournament) {
     return <Navigate to="/setup" replace />;
@@ -45,7 +60,16 @@ export function AdminPanel() {
           <p className="subtitle">Organisation &amp; table de marque (PC)</p>
         </div>
         <div className="header-actions">
-          <Link to={tournamentPath(tid, "tablet")} className="btn btn-accent">
+          <Link
+            to={tournamentPath(tid, "tablet")}
+            className={`btn btn-accent${!canGoLive ? " btn--disabled-hint" : ""}`}
+            onClick={(e) => {
+              if (!canGoLive) {
+                e.preventDefault();
+                notifyBlocked();
+              }
+            }}
+          >
             Mode tablette
           </Link>
           <Link to={tournamentPath(tid, "classement")} className="btn btn-outline">
@@ -56,14 +80,20 @@ export function AdminPanel() {
               <button
                 type="button"
                 className="btn btn-outline"
-                onClick={() => openPublicDisplayForMatch(tid, match.id)}
+                disabled={!canGoLive}
+                onClick={() => {
+                  if (!canGoLive) return notifyBlocked();
+                  openPublicDisplayForMatch(tid, match.id);
+                }}
               >
                 Écran match actif ↗
               </button>
               <button
                 type="button"
                 className="btn btn-accent"
+                disabled={!canGoLive}
                 onClick={() => {
+                  if (!canGoLive) return notifyBlocked();
                   if (!requestDisplayFullscreen(match.id)) {
                     window.alert(
                       "Ouvrez d'abord l'écran de ce match (bouton ci-dessus), puis recliquez.",
@@ -152,7 +182,7 @@ export function AdminPanel() {
               teamA={teamA}
               teamB={teamB}
               variant="admin"
-              onPatchMatch={patchMatch}
+              onPatchMatch={guardLivePatch}
               onTimerToggle={handleTimerToggle}
               onTimeout={handleTimeout}
               onEndPeriod={endPeriod}
@@ -165,6 +195,7 @@ export function AdminPanel() {
               canStartShootout={canStartShootout}
               canTimeoutA={canTimeoutA}
               canTimeoutB={canTimeoutB}
+              liveLocked={!canGoLive}
             />
           )}
         </div>

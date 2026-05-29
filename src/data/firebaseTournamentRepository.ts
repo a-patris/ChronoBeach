@@ -5,7 +5,7 @@ import {
   onSnapshot,
   setDoc,
 } from "firebase/firestore";
-import type { Tournament } from "../types";
+import type { Tournament, TournamentAccess } from "../types";
 import { getFirestoreDb } from "../config/firebaseApp";
 import {
   clearTournament,
@@ -18,27 +18,68 @@ import { ensureTournamentAccess, syncTournamentAccessCodes } from "../auth/acces
 import type { TournamentRepository } from "./tournamentRepository";
 
 const COLLECTION = "tournaments";
-const SAVE_DEBOUNCE_MS = 900;
+const SUMMARIES_COLLECTION = "tournamentSummaries";
+const SAVE_DEBOUNCE_MS = 1200;
 
 /** Firestore n'accepte pas undefined. */
 function forFirestore(tournament: Tournament): Tournament {
   return JSON.parse(JSON.stringify(tournament)) as Tournament;
 }
 
+function accessEquals(a?: TournamentAccess, b?: TournamentAccess): boolean {
+  if (!a || !b) return a === b;
+  return a.markerCode === b.markerCode && a.spectatorCode === b.spectatorCode;
+}
+
+function summaryFromTournament(tournament: Tournament) {
+  return {
+    name: tournament.name,
+    createdAt: tournament.createdAt,
+    ownerUid: tournament.ownerUid,
+    managerUid: tournament.managerUid,
+    matchCount: tournament.matches.length,
+    access: tournament.access,
+  };
+}
+
+function summaryKey(tournament: Tournament): string {
+  const access = tournament.access;
+  return [
+    tournament.name,
+    tournament.matches.length,
+    tournament.managerUid,
+    tournament.ownerUid,
+    access?.markerCode,
+    access?.spectatorCode,
+  ].join("|");
+}
+
 export function createFirebaseTournamentRepository(): TournamentRepository {
   const db = getFirestoreDb();
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
   let pending: Tournament | null = null;
+  let lastSyncedAccess: TournamentAccess | undefined;
+  let lastFlushedSummaryKey: string | undefined;
 
   const flushSave = async () => {
     if (!pending) return;
     const data = forFirestore(ensureTournamentAccess(pending));
     pending = null;
     await setDoc(doc(db, COLLECTION, data.id), data);
-    try {
-      await syncTournamentAccessCodes(data);
-    } catch (err) {
-      console.error("[ChronoBeach] Sync codes accès:", err);
+    const sk = summaryKey(data);
+    if (sk !== lastFlushedSummaryKey) {
+      await setDoc(doc(db, SUMMARIES_COLLECTION, data.id), summaryFromTournament(data), {
+        merge: true,
+      });
+      lastFlushedSummaryKey = sk;
+    }
+    if (!accessEquals(data.access, lastSyncedAccess)) {
+      try {
+        await syncTournamentAccessCodes(data, lastSyncedAccess);
+        lastSyncedAccess = data.access;
+      } catch (err) {
+        console.error("[ChronoBeach] Sync codes accès:", err);
+      }
     }
   };
 
@@ -51,6 +92,7 @@ export function createFirebaseTournamentRepository(): TournamentRepository {
       }
       const tournament = normalizeTournamentData(snap.data() as Tournament);
       saveTournament(tournament);
+      lastSyncedAccess = tournament.access;
       return tournament;
     },
 
@@ -73,7 +115,12 @@ export function createFirebaseTournamentRepository(): TournamentRepository {
         saveTimer = null;
       }
       pending = null;
-      await deleteDoc(doc(db, COLLECTION, tournamentId));
+      lastSyncedAccess = undefined;
+      lastFlushedSummaryKey = undefined;
+      await Promise.all([
+        deleteDoc(doc(db, COLLECTION, tournamentId)),
+        deleteDoc(doc(db, SUMMARIES_COLLECTION, tournamentId)).catch(() => undefined),
+      ]);
       const local = loadTournament();
       if (local?.id === tournamentId) clearTournament();
       tournamentSync.broadcast();
@@ -91,6 +138,7 @@ export function createFirebaseTournamentRepository(): TournamentRepository {
           }
           const tournament = normalizeTournamentData(snap.data() as Tournament);
           saveTournament(tournament);
+          lastSyncedAccess = tournament.access;
           listener(tournament);
           tournamentSync.broadcast();
         },

@@ -12,6 +12,7 @@ import {
   getDocs,
   serverTimestamp,
   setDoc,
+  writeBatch,
 } from "firebase/firestore";
 import { readFirebaseConfig } from "../config/firebase";
 import { getFirebaseAuth, getFirestoreDb } from "../config/firebaseApp";
@@ -24,6 +25,11 @@ import {
   type UserProfile,
   type UserRole,
 } from "./roles";
+import {
+  normalizeBillingStatus,
+  canGoLive,
+  type BillingStatus,
+} from "./billing";
 
 function profileFromDoc(uid: string, data: Record<string, unknown>): UserProfile {
   const role = normalizeUserRole(data.role) ?? "tournament_manager";
@@ -32,6 +38,10 @@ function profileFromDoc(uid: string, data: Record<string, unknown>): UserProfile
     email: String(data.email ?? ""),
     displayName: String(data.displayName ?? data.email ?? "Utilisateur"),
     role,
+    billingStatus:
+      data.billingStatus != null
+        ? normalizeBillingStatus(data.billingStatus)
+        : "active",
     createdAt: typeof data.createdAt === "string" ? data.createdAt : undefined,
     createdBy: typeof data.createdBy === "string" ? data.createdBy : undefined,
     mustChangePassword: data.mustChangePassword === true,
@@ -56,6 +66,7 @@ export async function ensureUserProfile(user: User): Promise<UserProfile> {
       email: user.email ?? "",
       displayName: user.displayName ?? user.email?.split("@")[0] ?? "Admin",
       role: "super_admin",
+      billingStatus: "active",
       createdAt: existing.data()?.createdAt ?? new Date().toISOString(),
     };
     try {
@@ -123,6 +134,7 @@ export async function createUserAccount(
   password: string,
   displayName: string,
   role: UserRole,
+  billingStatus: BillingStatus = role === "tournament_manager" ? "discovery" : "active",
 ): Promise<UserProfile> {
   const config = readFirebaseConfig();
   if (!config) throw new Error("Firebase non configuré");
@@ -143,6 +155,7 @@ export async function createUserAccount(
       displayName:
         displayName.trim() || email.trim().split("@")[0] || roleLabelFallback(role),
       role,
+      billingStatus,
       createdAt: new Date().toISOString(),
       createdBy: creatorUid,
       mustChangePassword: true,
@@ -152,6 +165,7 @@ export async function createUserAccount(
       email: profile.email,
       displayName: profile.displayName,
       role,
+      billingStatus,
       createdAt: profile.createdAt,
       createdBy: creatorUid,
       mustChangePassword: true,
@@ -169,6 +183,41 @@ function roleLabelFallback(role: UserRole): string {
   return "Organisateur";
 }
 
+async function syncTournamentsLiveForManager(
+  managerUid: string,
+  billingStatus: BillingStatus,
+): Promise<void> {
+  const liveEnabled = canGoLive(billingStatus, "tournament_manager");
+  const db = getFirestoreDb();
+  const snap = await getDocs(collection(db, "tournaments"));
+  const batch = writeBatch(db);
+  let pending = 0;
+
+  for (const d of snap.docs) {
+    const data = d.data() as { managerUid?: string; ownerUid?: string; liveEnabled?: boolean };
+    if (data.managerUid !== managerUid && data.ownerUid !== managerUid) continue;
+    if (data.liveEnabled === liveEnabled) continue;
+    batch.update(d.ref, { liveEnabled });
+    pending++;
+  }
+
+  if (pending > 0) await batch.commit();
+}
+
+export async function updateUserBillingStatus(
+  uid: string,
+  billingStatus: BillingStatus,
+): Promise<void> {
+  await setDoc(
+    doc(getFirestoreDb(), "users", uid),
+    { billingStatus, updatedAt: serverTimestamp() },
+    { merge: true },
+  );
+  await syncTournamentsLiveForManager(uid, billingStatus);
+}
+
+export type { BillingStatus };
+
 export type TournamentSummary = {
   id: string;
   name: string;
@@ -180,6 +229,43 @@ export type TournamentSummary = {
 };
 
 export async function listTournamentSummaries(
+  viewerUid: string | undefined,
+  viewerRole: UserRole | null,
+): Promise<TournamentSummary[]> {
+  const db = getFirestoreDb();
+  const summariesSnap = await getDocs(collection(db, "tournamentSummaries"));
+
+  const all =
+    summariesSnap.empty
+      ? await listTournamentSummariesLegacy(viewerUid, viewerRole)
+      : summariesSnap.docs.map((d) => {
+          const data = d.data() as {
+            name?: string;
+            createdAt?: string;
+            ownerUid?: string;
+            managerUid?: string;
+            matchCount?: number;
+            access?: { markerCode: string; spectatorCode: string };
+          };
+          return {
+            id: d.id,
+            name: data.name ?? "Sans nom",
+            createdAt: data.createdAt,
+            ownerUid: data.ownerUid,
+            managerUid: data.managerUid,
+            matchCount: data.matchCount ?? 0,
+            access: data.access,
+          };
+        });
+
+  const filtered = isPlatformStaff(viewerRole)
+    ? all
+    : all.filter((t) => t.managerUid === viewerUid || t.ownerUid === viewerUid);
+
+  return filtered.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
+}
+
+async function listTournamentSummariesLegacy(
   viewerUid: string | undefined,
   viewerRole: UserRole | null,
 ): Promise<TournamentSummary[]> {
@@ -222,6 +308,50 @@ export function createUserCreationErrorMessage(code: string): string {
     default:
       return "Impossible de créer le compte.";
   }
+}
+
+export function createDiscoverySignupErrorMessage(code: string): string {
+  return createUserCreationErrorMessage(code);
+}
+
+/** Inscription libre — compte organisateur en mode découverte (sandbox). */
+export async function registerDiscoveryAccount(
+  email: string,
+  password: string,
+  displayName: string,
+): Promise<UserProfile> {
+  const auth = getFirebaseAuth();
+  const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
+
+  const profile: UserProfile = {
+    uid: cred.user.uid,
+    email: email.trim(),
+    displayName: displayName.trim() || email.trim().split("@")[0] || "Organisateur",
+    role: "tournament_manager",
+    billingStatus: "discovery",
+    createdAt: new Date().toISOString(),
+  };
+
+  try {
+    await setDoc(doc(getFirestoreDb(), "users", cred.user.uid), {
+      email: profile.email,
+      displayName: profile.displayName,
+      role: "tournament_manager",
+      billingStatus: "discovery",
+      createdAt: profile.createdAt,
+      selfRegistered: true,
+      createdAtServer: serverTimestamp(),
+    });
+  } catch (err) {
+    try {
+      await cred.user.delete();
+    } catch {
+      await signOut(auth);
+    }
+    throw err;
+  }
+
+  return profile;
 }
 
 export function createPasswordChangeErrorMessage(code: string): string {

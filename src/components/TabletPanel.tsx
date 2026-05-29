@@ -1,5 +1,5 @@
+import { useCallback, useEffect, useRef } from "react";
 import { Link, useParams } from "react-router-dom";
-import { useEffect, useRef } from "react";
 import { FullscreenToggle } from "./FullscreenToggle";
 import { useFullscreen } from "../hooks/useFullscreen";
 import {
@@ -11,6 +11,7 @@ import { isScoringReady } from "../matchSheet";
 import { tournamentPath } from "../routes/paths";
 import { MatchSheetSetup } from "./MatchSheetSetup";
 import { ScorekeeperView } from "./ScorekeeperView";
+import type { Match } from "../types";
 
 function TabletShell({ children }: { children: React.ReactNode }) {
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -54,7 +55,20 @@ export function TabletPanel() {
     canStartShootout,
     canTimeoutA,
     canTimeoutB,
+    canGoLive,
+    notifyBlocked,
   } = useMatchControls();
+
+  const guardLivePatch = useCallback(
+    (updater: (m: Match) => Match) => {
+      if (!canGoLive) {
+        notifyBlocked();
+        return;
+      }
+      patchMatch(updater);
+    },
+    [canGoLive, notifyBlocked, patchMatch],
+  );
 
   if (!tournament || !tournamentId) {
     return null;
@@ -96,14 +110,22 @@ export function TabletPanel() {
       <button
         type="button"
         className="tablet-link tablet-link--btn"
-        onClick={() => openPublicDisplayForMatch(tournamentId, matchId)}
+        disabled={!canGoLive}
+        onClick={() => {
+          if (!canGoLive) return notifyBlocked();
+          openPublicDisplayForMatch(tournamentId, matchId);
+        }}
       >
         Écran ↗
       </button>
       <button
         type="button"
         className="tablet-link tablet-link--btn"
-        onClick={() => requestDisplayFullscreen(matchId)}
+        disabled={!canGoLive}
+        onClick={() => {
+          if (!canGoLive) return notifyBlocked();
+          requestDisplayFullscreen(matchId);
+        }}
       >
         FS écran
       </button>
@@ -134,7 +156,7 @@ export function TabletPanel() {
           teamA={teamA}
           teamB={teamB}
           variant="tablet"
-          onPatchMatch={patchMatch}
+          onPatchMatch={guardLivePatch}
           onTimerToggle={handleTimerToggle}
           onTimeout={handleTimeout}
           onEndPeriod={endPeriod}
@@ -144,6 +166,7 @@ export function TabletPanel() {
           canStartShootout={canStartShootout}
           canTimeoutA={canTimeoutA}
           canTimeoutB={canTimeoutB}
+          liveLocked={!canGoLive}
           extraHeader={header}
         />
       )}

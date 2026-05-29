@@ -4,6 +4,8 @@ import { getTournamentRepository } from "../data/tournamentRepository";
 import { spectatorWatchPath, tournamentPath } from "../routes/paths";
 import type { Match, Tournament } from "../types";
 import { getTeam, matchStatusLabel } from "../utils";
+import { tournamentLiveEnabled } from "../auth/billing";
+import { LiveLaunchGate } from "./LiveLaunchGate";
 
 function matchTitle(tournament: Tournament, match: Match): string {
   const a = getTeam(tournament, match.teamAId)?.name ?? "?";
@@ -73,6 +75,17 @@ export function SpectatorHubPage() {
           Réessayer
         </Link>
       </main>
+    );
+  }
+
+  if (!tournamentLiveEnabled(tournament)) {
+    return (
+      <LiveLaunchGate
+        tournamentName={tournament.name}
+        variant="public"
+        backTo="/join/spectator"
+        backLabel="Changer de code"
+      />
     );
   }
 

@@ -2,11 +2,14 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useParams } from "react-router-dom";
 import { useTournamentContext } from "../context/TournamentContext";
 import { subscribeDisplayCommands } from "../displaySync";
+import { tournamentLiveEnabled } from "../auth/billing";
 import { FullscreenToggle } from "./FullscreenToggle";
 import { useFullscreen } from "../hooks/useFullscreen";
 import { useDisplayEventQueue } from "../hooks/useDisplayEventQueue";
+import { useClockTick } from "../hooks/useClockTick";
 import { getRegularShotProgress, REGULAR_SHOTS_PER_TEAM, shootoutScore } from "../shootout";
 import { DisplayEventOverlay } from "./DisplayEventOverlay";
+import { LiveLaunchGate } from "./LiveLaunchGate";
 import { DisplayTimeoutStatus } from "./DisplayTimeoutStatus";
 import { TimeoutBanner } from "./TimeoutBanner";
 import { GoldenGoalBanner } from "./GoldenGoalBanner";
@@ -168,6 +171,17 @@ export function PublicDisplay() {
     );
   }
 
+  if (!tournamentLiveEnabled(tournament)) {
+    return (
+      <LiveLaunchGate
+        tournamentName={tournament.name}
+        variant="public"
+        backTo="/"
+        backLabel="Accueil"
+      />
+    );
+  }
+
   if (!match) {
     return (
       <DisplayShell className="display-empty" matchId={displayMatchId}>
@@ -191,7 +205,8 @@ export function PublicDisplay() {
 function MatchDisplay({ tournament, match }: { tournament: Tournament; match: Match }) {
   const teamA = getTeam(tournament, match.teamAId);
   const teamB = getTeam(tournament, match.teamBId);
-  const remaining = computeRemainingSeconds(match);
+  const now = useClockTick(1000, match.timer.running || !!match.timeout?.timer.running);
+  const remaining = computeRemainingSeconds(match, now);
   const highlight = useDisplayEventQueue(tournament, match);
   const highlightTeam =
     highlight?.teamSide === "A" ? teamA : highlight?.teamSide === "B" ? teamB : undefined;
