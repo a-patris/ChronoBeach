@@ -2,11 +2,15 @@ const functions = require("firebase-functions/v1");
 const { initializeApp } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
+const nodemailer = require("nodemailer");
+const { SecretManagerServiceClient } = require("@google-cloud/secret-manager");
 
 initializeApp();
 
 const APP_NAME = "ChronoBeach";
 const BOOTSTRAP_SUPER_ADMIN_EMAIL = "amaury.patris@gmail.com";
+const SMTP_SECRET_NAME =
+  "projects/chronobeach-e47a9/secrets/firestore-send-email-SMTP_PASSWORD/versions/latest";
 
 function getAdminEmail() {
   return process.env.ADMIN_NOTIFY_EMAIL || "amaury.patris@gmail.com";
@@ -14,6 +18,50 @@ function getAdminEmail() {
 
 function getAppAdminUrl() {
   return process.env.APP_ADMIN_URL || "https://chrono-beach.vercel.app/users";
+}
+
+function getSmtpUser() {
+  return process.env.SMTP_USER || "amaury.patris@gmail.com";
+}
+
+let cachedSmtpPassword = null;
+
+async function getSmtpPassword() {
+  if (process.env.SMTP_PASSWORD) return process.env.SMTP_PASSWORD;
+  if (cachedSmtpPassword) return cachedSmtpPassword;
+
+  try {
+    const client = new SecretManagerServiceClient();
+    const [version] = await client.accessSecretVersion({ name: SMTP_SECRET_NAME });
+    cachedSmtpPassword = version.payload.data.toString("utf8");
+    return cachedSmtpPassword;
+  } catch (err) {
+    console.warn("[ChronoBeach] SMTP secret unavailable:", err.message);
+    return null;
+  }
+}
+
+async function sendActivationEmail({ to, subject, text, html }) {
+  const pass = await getSmtpPassword();
+  if (!pass) {
+    throw new Error("SMTP non configuré (secret ou SMTP_PASSWORD manquant).");
+  }
+
+  const user = getSmtpUser();
+  const transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST || "smtp.gmail.com",
+    port: Number(process.env.SMTP_PORT || 465),
+    secure: true,
+    auth: { user, pass },
+  });
+
+  await transporter.sendMail({
+    from: process.env.SMTP_FROM || user,
+    to,
+    subject,
+    text,
+    html,
+  });
 }
 
 function normalizeAccessCode(code) {
@@ -177,9 +225,15 @@ exports.notifyActivationRequest = functions
       <p><a href="${appUrl}">Ouvrir l'espace admin → Demandes d'activation</a></p>
     `;
 
-    await getFirestore().collection("mail").add({
-      to: adminEmail,
-      createdAt: FieldValue.serverTimestamp(),
-      message: { subject, text, html },
-    });
+    try {
+      await sendActivationEmail({ to: adminEmail, subject, text, html });
+      console.log("[ChronoBeach] E-mail d'activation envoyé à", adminEmail);
+    } catch (err) {
+      console.error("[ChronoBeach] Envoi SMTP direct échoué, fallback collection mail:", err.message);
+      await getFirestore().collection("mail").add({
+        to: adminEmail,
+        createdAt: FieldValue.serverTimestamp(),
+        message: { subject, text, html },
+      });
+    }
   });
