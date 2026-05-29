@@ -12,6 +12,7 @@ type CreateMatchPayload = {
 type Props = {
   tournament: Tournament;
   onSetActive: (matchId: string) => void;
+  onOpenDisplay: (matchId: string) => void;
   onCreateMatch: (payload: CreateMatchPayload) => void;
   onDeleteMatch: (matchId: string) => void;
 };
@@ -22,12 +23,14 @@ function MatchList({
   tournament,
   activeId,
   onSetActive,
+  onOpenDisplay,
 }: {
   title: string;
   matches: Match[];
   tournament: Tournament;
   activeId?: string;
   onSetActive: (id: string) => void;
+  onOpenDisplay: (id: string) => void;
 }) {
   if (!matches.length) return null;
 
@@ -43,6 +46,7 @@ function MatchList({
           return (
             <li key={m.id} className={isActive ? "active" : ""}>
               <button type="button" className="match-list-btn" onClick={() => onSetActive(m.id)}>
+                {m.courtLabel && <span className="match-list-court">{m.courtLabel}</span>}
                 {m.label && <span className="match-list-label">{m.label}</span>}
                 <span>
                   {a} vs {b}
@@ -53,6 +57,14 @@ function MatchList({
                   {m.scoreA}-{m.scoreB} · {matchStatusLabel(m.status)}
                   {m.mode === "shootout" && " · SO"}
                 </span>
+              </button>
+              <button
+                type="button"
+                className="match-list-display-btn"
+                title="Ouvrir l'écran public pour ce match"
+                onClick={() => onOpenDisplay(m.id)}
+              >
+                ↗
               </button>
             </li>
           );
@@ -65,6 +77,7 @@ function MatchList({
 export function MatchSelector({
   tournament,
   onSetActive,
+  onOpenDisplay,
   onCreateMatch,
   onDeleteMatch,
 }: Props) {
@@ -79,6 +92,7 @@ export function MatchSelector({
   const [teamA, setTeamA] = useState(poolTeams[0]?.id ?? "");
   const [teamB, setTeamB] = useState(poolTeams[1]?.id ?? "");
   const [label, setLabel] = useState("");
+  const [courtLabel, setCourtLabel] = useState("");
   const [scheduledTime, setScheduledTime] = useState("");
 
   useEffect(() => {
@@ -127,9 +141,11 @@ export function MatchSelector({
                   teamBId: teamB,
                   poolId: poolId || undefined,
                   label: label || undefined,
+                  courtLabel: courtLabel || undefined,
                   scheduledTime: scheduledTime || undefined,
                 });
                 setLabel("");
+                setCourtLabel("");
                 setScheduledTime("");
               }}
             >
@@ -139,8 +155,10 @@ export function MatchSelector({
           <MatchFormFields
             compact
             label={label}
+            courtLabel={courtLabel}
             scheduledTime={scheduledTime}
             onLabelChange={setLabel}
+            onCourtLabelChange={setCourtLabel}
             onScheduledTimeChange={setScheduledTime}
           />
         </div>
@@ -152,6 +170,7 @@ export function MatchSelector({
         tournament={tournament}
         activeId={tournament.activeMatchId}
         onSetActive={onSetActive}
+        onOpenDisplay={onOpenDisplay}
       />
       <MatchList
         title="À venir"
@@ -159,6 +178,7 @@ export function MatchSelector({
         tournament={tournament}
         activeId={tournament.activeMatchId}
         onSetActive={onSetActive}
+        onOpenDisplay={onOpenDisplay}
       />
       <MatchList
         title="Terminés"
@@ -166,6 +186,7 @@ export function MatchSelector({
         tournament={tournament}
         activeId={tournament.activeMatchId}
         onSetActive={onSetActive}
+        onOpenDisplay={onOpenDisplay}
       />
 
       {tournament.activeMatchId && (

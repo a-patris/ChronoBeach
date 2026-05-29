@@ -29,3 +29,11 @@ export function useActiveMatch(tournament: Tournament | null): Match | undefined
   if (!tournament?.activeMatchId) return undefined;
   return tournament.matches.find((m) => m.id === tournament.activeMatchId);
 }
+
+export function useMatchById(
+  tournament: Tournament | null,
+  matchId: string | null | undefined,
+): Match | undefined {
+  if (!tournament || !matchId) return undefined;
+  return tournament.matches.find((m) => m.id === matchId);
+}

@@ -2,17 +2,20 @@ import { MATCH_LABEL_PRESETS } from "../schedule";
 
 type Props = {
   label: string;
+  courtLabel?: string;
   scheduledTime: string;
   onLabelChange: (value: string) => void;
+  onCourtLabelChange?: (value: string) => void;
   onScheduledTimeChange: (value: string) => void;
-  /** Sidebar étroite : champs empilés. */
   compact?: boolean;
 };
 
 export function MatchFormFields({
   label,
+  courtLabel = "",
   scheduledTime,
   onLabelChange,
+  onCourtLabelChange,
   onScheduledTimeChange,
   compact = false,
 }: Props) {
@@ -45,6 +48,16 @@ export function MatchFormFields({
           </select>
         </div>
       </label>
+      {onCourtLabelChange && (
+        <label className="match-field">
+          Terrain
+          <input
+            value={courtLabel}
+            onChange={(e) => onCourtLabelChange(e.target.value)}
+            placeholder="ex. Terrain 1, Court A…"
+          />
+        </label>
+      )}
       <label className="match-field">
         Heure prévue
         <input

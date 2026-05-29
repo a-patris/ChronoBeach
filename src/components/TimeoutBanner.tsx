@@ -6,7 +6,7 @@ import { TeamLogo } from "./TeamLogo";
 type Props = {
   tournament: Tournament;
   timeout?: TimeoutState;
-  variant?: "admin" | "display";
+  variant?: "admin" | "display" | "spectator";
 };
 
 export function TimeoutBanner({ tournament, timeout, variant = "admin" }: Props) {
@@ -22,7 +22,10 @@ export function TimeoutBanner({ tournament, timeout, variant = "admin" }: Props)
       <span className="timeout-title">TEMPS MORT</span>
       <p className="timeout-chrono">{formatTime(remaining)}</p>
       <div className="timeout-team-row">
-        <TeamLogo team={team} size={variant === "display" ? "display" : "lg"} />
+        <TeamLogo
+          team={team}
+          size={variant === "display" ? "display" : variant === "spectator" ? "lg" : "lg"}
+        />
         <span className="timeout-team">{team.name}</span>
       </div>
     </div>

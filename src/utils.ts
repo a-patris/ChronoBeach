@@ -18,6 +18,11 @@ export {
   shootoutScore,
   undoLastShootoutShot,
 } from "./shootout";
+import {
+  TEAM_LOGO_MAX_BYTES,
+  TEAM_LOGO_MAX_PX,
+  TEAM_LOGO_MAX_UPLOAD_BYTES,
+} from "./teamLogo";
 
 export const TIMEOUT_DURATION_SECONDS = 60;
 
@@ -74,6 +79,7 @@ export function applyTeamTimeout(match: Match, teamId: string): Match | null {
   return {
     ...withUsed,
     status: "paused",
+    remainingSeconds: computeRemainingSeconds(match),
     timer: { running: false },
     timeout: startTimeout(teamId),
   };
@@ -82,6 +88,7 @@ export function applyTeamTimeout(match: Match, teamId: string): Match | null {
 export type CreateMatchOptions = {
   poolId?: string;
   label?: string;
+  courtLabel?: string;
   scheduledTime?: string;
   sortOrder?: number;
 };
@@ -100,6 +107,7 @@ export function createMatch(
     teamBId,
     poolId: opts.poolId,
     label: opts.label?.trim() || undefined,
+    courtLabel: opts.courtLabel?.trim() || undefined,
     scheduledTime: opts.scheduledTime?.trim() || undefined,
     sortOrder: opts.sortOrder,
     mode: "match",
@@ -248,16 +256,30 @@ export function computeRemainingSeconds(match: Match, now = Date.now()): number 
   return Math.max(0, timer.remainingAtStart - elapsed);
 }
 
+/** Temps écoulé dans la période (inverse du chrono affiché). */
+export function computePeriodElapsedSeconds(match: Match, now = Date.now()): number {
+  const remaining = computeRemainingSeconds(match, now);
+  return Math.max(0, match.durationSeconds - remaining);
+}
+
 export function syncTimerRemaining(match: Match, now = Date.now()): Match {
   if (!match.timer.running) return match;
   const remaining = computeRemainingSeconds(match, now);
   if (remaining <= 0) {
-    return {
+    const paused = {
       ...match,
       remainingSeconds: 0,
-      status: match.status === "running" ? "paused" : match.status,
+      status: match.status === "running" ? ("paused" as const) : match.status,
       timer: { running: false },
     };
+    if (
+      paused.mode === "match" &&
+      paused.scoreA === paused.scoreB &&
+      !paused.goldenGoalActive
+    ) {
+      return { ...paused, goldenGoalActive: true };
+    }
+    return paused;
   }
   return { ...match, remainingSeconds: remaining };
 }
@@ -322,15 +344,18 @@ export function canStartShootout(match: Match): boolean {
   return !!period1 && !!period2 && period1 !== period2 && match.mode === "match";
 }
 
-const LOGO_MAX_PX = 160;
-
-/** Redimensionne une image pour stockage localStorage (data URL). */
+/** Redimensionne et compresse une image pour Firestore / localStorage (data URL). */
 export function fileToTeamLogo(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     if (!file.type.startsWith("image/")) {
       reject(new Error("Fichier image requis"));
       return;
     }
+    if (file.size > TEAM_LOGO_MAX_UPLOAD_BYTES) {
+      reject(new Error("Image trop lourde (max 2 Mo avant compression)."));
+      return;
+    }
+
     const reader = new FileReader();
     reader.onerror = () => reject(reader.error);
     reader.onload = () => {
@@ -339,9 +364,10 @@ export function fileToTeamLogo(file: File): Promise<string> {
       img.onload = () => {
         let w = img.width;
         let h = img.height;
-        const scale = Math.min(1, LOGO_MAX_PX / Math.max(w, h));
-        w = Math.round(w * scale);
-        h = Math.round(h * scale);
+        const scale = Math.min(1, TEAM_LOGO_MAX_PX / Math.max(w, h));
+        w = Math.max(1, Math.round(w * scale));
+        h = Math.max(1, Math.round(h * scale));
+
         const canvas = document.createElement("canvas");
         canvas.width = w;
         canvas.height = h;
@@ -351,13 +377,38 @@ export function fileToTeamLogo(file: File): Promise<string> {
           return;
         }
         ctx.drawImage(img, 0, 0, w, h);
-        const webp = canvas.toDataURL("image/webp", 0.82);
-        resolve(webp.startsWith("data:image/webp") ? webp : canvas.toDataURL("image/jpeg", 0.85));
+
+        const qualities = [0.82, 0.7, 0.55, 0.42];
+        for (const q of qualities) {
+          const webp = canvas.toDataURL("image/webp", q);
+          if (webp.startsWith("data:image/webp")) {
+            if (dataUrlByteSize(webp) <= TEAM_LOGO_MAX_BYTES) {
+              resolve(webp);
+              return;
+            }
+          }
+          const jpeg = canvas.toDataURL("image/jpeg", q);
+          if (dataUrlByteSize(jpeg) <= TEAM_LOGO_MAX_BYTES) {
+            resolve(jpeg);
+            return;
+          }
+        }
+
+        reject(
+          new Error(
+            `Logo encore trop lourd après compression (max ~${Math.round(TEAM_LOGO_MAX_BYTES / 1024)} Ko). Utilisez une image plus simple.`,
+          ),
+        );
       };
       img.src = reader.result as string;
     };
     reader.readAsDataURL(file);
   });
+}
+
+function dataUrlByteSize(dataUrl: string): number {
+  const base64 = dataUrl.split(",")[1] ?? "";
+  return Math.ceil((base64.length * 3) / 4);
 }
 
 export function getShootoutHint(match: Match, teamAName: string, teamBName: string): string {

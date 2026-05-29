@@ -3,11 +3,20 @@ import { Link } from "react-router-dom";
 import { clearTournament } from "../storage";
 import { useTournamentContext } from "../context/TournamentContext";
 import { generatePoolSchedule } from "../schedule";
-import { createMatch, createTeam, sortMatchesBySchedule, uid } from "../utils";
-import type { Pool, Tournament } from "../types";
-import { LogoPresetPicker } from "./LogoPresetPicker";
+import { createMatch, createTeam, fileToTeamLogo, sortMatchesBySchedule, uid } from "../utils";
+import { autoRecallTeams } from "../teamRecall";
+import type { Pool, Tournament, TournamentEventType } from "../types";
 import { MatchFormFields } from "./MatchFormFields";
+import { TeamLogo } from "./TeamLogo";
 import { TeamLogoUpload } from "./TeamLogoUpload";
+import { TEAM_LOGO_UPLOAD_HINT } from "../teamLogo";
+import {
+  applyFormatPatch,
+  TournamentFormatFields,
+} from "./TournamentFormatFields";
+import { getTournamentEventType, getTournamentRosterLimit, normalizeTournamentSettings, OFFICIAL_ROSTER_SIZE } from "../tournamentConfig";
+import { tournamentPath } from "../routes/paths";
+import { TournamentAccessPanel } from "./TournamentAccessPanel";
 
 export function TournamentSetup() {
   const { tournament, setTournament } = useTournamentContext();
@@ -15,15 +24,21 @@ export function TournamentSetup() {
   const [teamName, setTeamName] = useState("");
   const [poolName, setPoolName] = useState("");
   const [newTeamLogo, setNewTeamLogo] = useState<string | undefined>();
+  const [newTeamLogoLoading, setNewTeamLogoLoading] = useState(false);
+  const [newTeamLogoError, setNewTeamLogoError] = useState<string | null>(null);
+  const [eventType, setEventType] = useState<TournamentEventType>("official");
+  const [rosterSize, setRosterSize] = useState(OFFICIAL_ROSTER_SIZE);
 
   const createNew = () => {
     if (!name.trim()) return;
+    const format = normalizeTournamentSettings({ eventType, rosterSize });
     const t: Tournament = {
       id: uid(),
       name: name.trim(),
       teams: [],
       pools: [],
       matches: [],
+      ...format,
     };
     setTournament(t);
   };
@@ -39,6 +54,7 @@ export function TournamentSetup() {
     });
     setTeamName("");
     setNewTeamLogo(undefined);
+    setNewTeamLogoError(null);
   };
 
   const addPool = () => {
@@ -113,6 +129,12 @@ export function TournamentSetup() {
               placeholder="Beach Handball Open 2026"
             />
           </label>
+          <TournamentFormatFields
+            eventType={eventType}
+            rosterSize={rosterSize}
+            onEventTypeChange={setEventType}
+            onRosterSizeChange={setRosterSize}
+          />
           <button type="button" className="btn btn-accent btn-lg" onClick={createNew}>
             Créer le tournoi
           </button>
@@ -126,10 +148,10 @@ export function TournamentSetup() {
       <header className="page-header">
         <h1>{tournament.name}</h1>
         <div className="header-actions">
-          <Link to="/classement" className="btn btn-outline">
+          <Link to={tournamentPath(tournament.id, "classement")} className="btn btn-outline">
             Classement
           </Link>
-          <Link to="/admin" className="btn btn-accent">
+          <Link to={tournamentPath(tournament.id, "admin")} className="btn btn-accent">
             Table de marque →
           </Link>
           <button type="button" className="btn btn-outline" onClick={resetAll}>
@@ -137,6 +159,29 @@ export function TournamentSetup() {
           </button>
         </div>
       </header>
+
+      <TournamentAccessPanel tournament={tournament} />
+
+      <section className="panel setup-options">
+        <h2>Options tournoi</h2>
+        <TournamentFormatFields
+          eventType={getTournamentEventType(tournament)}
+          rosterSize={getTournamentRosterLimit(tournament)}
+          onEventTypeChange={(type) =>
+            setTournament(
+              applyFormatPatch(
+                tournament,
+                type,
+                type === "official" ? OFFICIAL_ROSTER_SIZE : getTournamentRosterLimit(tournament),
+              ),
+            )
+          }
+          onRosterSizeChange={(size) =>
+            setTournament(applyFormatPatch(tournament, "friendly", size))
+          }
+          compact
+        />
+      </section>
 
       <section className="panel">
         <h2>Poules</h2>
@@ -166,18 +211,50 @@ export function TournamentSetup() {
 
       <section className="panel">
         <h2>Équipes ({tournament.teams.length})</h2>
-        <LogoPresetPicker selected={newTeamLogo} onSelect={setNewTeamLogo} />
-        <div className="add-team-row">
+        <div className="add-team-row add-team-row--with-logo">
+          <TeamLogo
+            team={newTeamLogo ? { name: teamName || "?", logo: newTeamLogo } : { name: teamName || "?", logo: undefined }}
+            size="md"
+          />
           <input
             value={teamName}
             onChange={(e) => setTeamName(e.target.value)}
             placeholder="Nom de l'équipe"
             onKeyDown={(e) => e.key === "Enter" && addTeam()}
           />
+          <label className="btn btn-outline btn-sm add-team-logo-btn">
+            {newTeamLogoLoading ? "…" : newTeamLogo ? "Changer logo" : "Logo"}
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              className="sr-only"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (!file) return;
+                setNewTeamLogoError(null);
+                setNewTeamLogoLoading(true);
+                try {
+                  setNewTeamLogo(await fileToTeamLogo(file));
+                } catch (err) {
+                  setNewTeamLogoError(err instanceof Error ? err.message : "Erreur logo");
+                } finally {
+                  setNewTeamLogoLoading(false);
+                }
+              }}
+            />
+          </label>
+          {newTeamLogo && (
+            <button type="button" className="btn btn-outline btn-sm" onClick={() => setNewTeamLogo(undefined)}>
+              Sans logo
+            </button>
+          )}
           <button type="button" className="btn btn-accent" onClick={addTeam}>
             Ajouter
           </button>
         </div>
+        {newTeamLogoError && <p className="logo-error">{newTeamLogoError}</p>}
+        <p className="hint team-logo-hint">{TEAM_LOGO_UPLOAD_HINT}</p>
         <ul className="team-list">
           {tournament.teams.map((t) => (
             <li key={t.id} className="team-list-item">
@@ -261,8 +338,8 @@ export function TournamentSetup() {
 
       <p className="hint">
         {tournament.matches.length} match(s) ·{" "}
-        <Link to="/classement">Voir le classement</Link> ·{" "}
-        <Link to="/admin">Table de marque</Link>
+        <Link to={tournamentPath(tournament.id, "classement")}>Voir le classement</Link> ·{" "}
+        <Link to={tournamentPath(tournament.id, "admin")}>Table de marque</Link>
       </p>
     </main>
   );
@@ -288,12 +365,15 @@ function CreateMatchForm({
   const add = () => {
     if (!a || !b || a === b) return;
     const maxOrder = tournament.matches.reduce((max, m) => Math.max(max, m.sortOrder ?? 0), 0);
-    const match = createMatch(a, b, 600, {
-      poolId: poolId || undefined,
-      label: label || undefined,
-      scheduledTime: scheduledTime || undefined,
-      sortOrder: maxOrder + 1,
-    });
+    const match = autoRecallTeams(
+      tournament,
+      createMatch(a, b, 600, {
+        poolId: poolId || undefined,
+        label: label || undefined,
+        scheduledTime: scheduledTime || undefined,
+        sortOrder: maxOrder + 1,
+      }),
+    );
     setTournament({
       ...tournament,
       matches: sortMatchesBySchedule([...tournament.matches, match]),

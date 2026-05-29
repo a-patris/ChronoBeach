@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { clearTournament, loadTournament, saveTournament } from "../storage";
+import { getTournamentRepository } from "../data/tournamentRepository";
+import { loadTournament } from "../storage";
 import { tournamentSync } from "../sync";
 import type { Match, Tournament } from "../types";
 import {
@@ -45,29 +46,48 @@ function syncActiveMatchTimers(match: Match, now = Date.now()): Match | null {
   return changed ? updated : null;
 }
 
+function syncAllMatchTimers(tournament: Tournament, now = Date.now()): Tournament | null {
+  let changed = false;
+  const matches = tournament.matches.map((m) => {
+    const latest = tournament.matches.find((x) => x.id === m.id) ?? m;
+    const patched = syncActiveMatchTimers(latest, now);
+    if (!patched) return latest;
+    changed = true;
+    return mergeMatchTimerFields(latest, patched);
+  });
+  if (!changed) return null;
+  return { ...tournament, matches };
+}
+
 export function useTournament() {
   const [tournament, setTournamentState] = useState<Tournament | null>(() =>
     loadTournament(),
   );
   const tickRef = useRef<number | null>(null);
+  const repo = getTournamentRepository();
 
-  const persist = useCallback((next: Tournament | null) => {
-    setTournamentState(next);
-    if (next) saveTournament(next);
-    tournamentSync.broadcast();
-  }, []);
+  const persist = useCallback(
+    (next: Tournament | null) => {
+      setTournamentState(next);
+      if (next) void repo.save(next);
+      else {
+        const prev = loadTournament();
+        if (prev) void repo.clear(prev.id);
+      }
+    },
+    [repo],
+  );
 
   const setTournament = useCallback(
     (updater: Tournament | null | ((prev: Tournament | null) => Tournament | null)) => {
       setTournamentState((prev) => {
         const next = typeof updater === "function" ? updater(prev) : updater;
-        if (next) saveTournament(next);
-        else clearTournament();
-        tournamentSync.broadcast();
+        if (next) void repo.save(next);
+        else if (prev) void repo.clear(prev.id);
         return next;
       });
     },
-    [],
+    [repo],
   );
 
   const updateActiveMatch = useCallback(
@@ -91,52 +111,30 @@ export function useTournament() {
     });
   }, []);
 
+  /** Chrono : tous les matchs en cours (multi-terrains / tablettes). */
   useEffect(() => {
     const tick = () => {
       const current = loadTournament();
-      if (!current?.activeMatchId) return;
+      if (!current) return;
 
-      const match = current.matches.find((m) => m.id === current.activeMatchId);
-      if (!match) return;
-
-      const timerPatched = syncActiveMatchTimers(match);
+      const timerPatched = syncAllMatchTimers(current);
       if (!timerPatched) return;
 
-      // Relecture avant écriture : ne pas écraser score / shoot-out mis à jour entre-temps
-      const latest = loadTournament();
-      if (!latest?.activeMatchId) return;
-      const latestMatch = latest.matches.find((m) => m.id === latest.activeMatchId);
-      if (!latestMatch) return;
-
-      const merged = mergeMatchTimerFields(latestMatch, timerPatched);
-      if (
-        merged.remainingSeconds === latestMatch.remainingSeconds &&
-        merged.timer.running === latestMatch.timer.running &&
-        merged.timeout === latestMatch.timeout &&
-        merged.status === latestMatch.status
-      ) {
-        return;
-      }
-
-      const next: Tournament = {
-        ...latest,
-        matches: latest.matches.map((m) => (m.id === merged.id ? merged : m)),
-      };
-      saveTournament(next);
-      setTournamentState(next);
-      tournamentSync.broadcast();
+      void repo.save(timerPatched);
+      setTournamentState(timerPatched);
     };
 
     tickRef.current = window.setInterval(tick, 250);
     return () => {
       if (tickRef.current) clearInterval(tickRef.current);
     };
-  }, [tournament?.activeMatchId]);
+  }, [repo, tournament?.id]);
 
   return {
     tournament,
     setTournament,
     persist,
     updateActiveMatch,
+    syncFromRemote: setTournamentState,
   };
 }

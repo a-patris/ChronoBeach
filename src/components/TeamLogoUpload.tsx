@@ -1,8 +1,8 @@
 import { useRef, useState } from "react";
 import type { Team } from "../types";
 import { fileToTeamLogo } from "../utils";
+import { TEAM_LOGO_UPLOAD_HINT } from "../teamLogo";
 import { TeamLogo } from "./TeamLogo";
-import { LogoPresetPicker } from "./LogoPresetPicker";
 
 type Props = {
   team: Team;
@@ -31,30 +31,27 @@ export function TeamLogoUpload({ team, onChange }: Props) {
 
   return (
     <div className="team-logo-upload">
-      <LogoPresetPicker
-        selected={team.logo?.startsWith("/logos/presets/") ? team.logo : undefined}
-        onSelect={(path) => onChange(path)}
-      />
       <div className="team-logo-upload-row">
         <TeamLogo team={team} size="md" />
         <div className="team-logo-upload-actions">
-        <input
-          ref={inputRef}
-          type="file"
-          accept="image/png,image/jpeg,image/webp,image/gif"
-          className="sr-only"
-          id={`logo-${team.id}`}
-          onChange={(e) => handleFile(e.target.files?.[0])}
-        />
-        <label htmlFor={`logo-${team.id}`} className="btn btn-outline btn-sm">
-          {loading ? "…" : team.logo ? "Changer" : "Ajouter logo"}
-        </label>
-        {team.logo && (
-          <button type="button" className="btn btn-outline btn-sm" onClick={() => onChange(undefined)}>
-            Retirer
-          </button>
-        )}
-        {error && <span className="logo-error">{error}</span>}
+          <input
+            ref={inputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            className="sr-only"
+            id={`logo-${team.id}`}
+            onChange={(e) => handleFile(e.target.files?.[0])}
+          />
+          <label htmlFor={`logo-${team.id}`} className="btn btn-outline btn-sm">
+            {loading ? "…" : team.logo ? "Changer le logo" : "Ajouter un logo"}
+          </label>
+          {team.logo && (
+            <button type="button" className="btn btn-outline btn-sm" onClick={() => onChange(undefined)}>
+              Retirer
+            </button>
+          )}
+          {error && <span className="logo-error">{error}</span>}
+          <p className="hint team-logo-hint">{TEAM_LOGO_UPLOAD_HINT}</p>
         </div>
       </div>
     </div>

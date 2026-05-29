@@ -1,0 +1,117 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function isBootstrapSuperAdmin() {
+      return isSignedIn() && request.auth.token.email in [
+        "amaury.patris@gmail.com"
+      ];
+    }
+
+    function isSuperAdmin() {
+      return isSignedIn() && (
+        isBootstrapSuperAdmin() ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         userDoc().data.role == "super_admin")
+      );
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        userDoc().data.role == "admin";
+    }
+
+    function isPlatformStaff() {
+      return isSuperAdmin() || isAdmin();
+    }
+
+    function isTournamentManagerRole() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        userDoc().data.role == "tournament_manager";
+    }
+
+    function isTournamentManager() {
+      return isPlatformStaff() || isTournamentManagerRole();
+    }
+
+    function tournamentDoc(tId) {
+      return get(/databases/$(database)/documents/tournaments/$(tId));
+    }
+
+    function managesTournament(tId) {
+      return tournamentDoc(tId).data.managerUid == request.auth.uid ||
+        tournamentDoc(tId).data.ownerUid == request.auth.uid;
+    }
+
+    function canManageTournament(tId) {
+      return isPlatformStaff() ||
+        (isTournamentManagerRole() && managesTournament(tId));
+    }
+
+    function hasMarkerSession(tId) {
+      return exists(/databases/$(database)/documents/tournaments/$(tId)/markerSessions/$(request.auth.uid));
+    }
+
+    match /users/{userId} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || isPlatformStaff());
+
+      // Premier login super admin (doc users/{uid} pas encore créé)
+      allow create, update: if request.auth.uid == userId && isBootstrapSuperAdmin();
+
+      // Super admin / admin créent des comptes pour d'autres
+      allow create: if isSuperAdmin() ||
+        (isAdmin() && request.resource.data.role == "tournament_manager");
+
+      allow update, delete: if isSuperAdmin() ||
+        (isAdmin() && resource.data.role == "tournament_manager");
+
+      // 1er login : l'utilisateur désactive mustChangePassword sur son propre doc
+      allow update: if request.auth.uid == userId &&
+        resource.data.role == request.resource.data.role &&
+        resource.data.email == request.resource.data.email &&
+        resource.data.mustChangePassword == true &&
+        request.resource.data.mustChangePassword == false;
+    }
+
+    match /accessCodes/{code} {
+      allow get: if true;
+      allow list: if false;
+      allow create, update: if isSignedIn() && (
+        isPlatformStaff() ||
+        (isTournamentManagerRole() &&
+         canManageTournament(request.resource.data.tournamentId))
+      );
+      allow delete: if isSignedIn() && (
+        isPlatformStaff() ||
+        (isTournamentManagerRole() &&
+         canManageTournament(resource.data.tournamentId))
+      );
+    }
+
+    match /tournaments/{tournamentId} {
+      allow get: if true;
+      allow list: if isTournamentManager();
+      allow create: if isTournamentManager() && (
+        isPlatformStaff() ||
+        request.resource.data.managerUid == request.auth.uid
+      );
+      allow update, delete: if canManageTournament(tournamentId) || hasMarkerSession(tournamentId);
+
+      match /markerSessions/{sessionId} {
+        allow create: if isSignedIn() &&
+          request.auth.uid == sessionId &&
+          request.resource.data.markerCode == tournamentDoc(tournamentId).data.access.markerCode;
+        allow read: if request.auth.uid == sessionId || canManageTournament(tournamentId);
+      }
+    }
+  }
+}

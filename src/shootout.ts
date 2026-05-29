@@ -12,14 +12,14 @@ export function otherTeam(teamAId: string, teamBId: string, teamId: string): str
   return teamId === teamAId ? teamBId : teamAId;
 }
 
-/** Nouveau shoot-out : choix de l'équipe qui commence (tirage au sort). */
-export function createShootout(teamAId: string, _teamBId: string): Shootout {
+/** Nouveau shoot-out : tirage au sort obligatoire avant le premier tir. */
+export function createShootout(_teamAId: string, _teamBId: string): Shootout {
   return {
     active: true,
     finished: false,
     phase: "setup",
     suddenDeath: false,
-    firstShooterId: teamAId,
+    firstShooterId: "",
     shots: [],
     currentRound: 1,
     currentTeamId: undefined,
@@ -120,6 +120,7 @@ export function recordShootoutShot(
   teamBId: string,
   result: ShotResult,
   goalPoints = 1,
+  playerId?: string,
 ): Shootout {
   if (shootout.finished || shootout.phase === "setup" || !shootout.currentTeamId) {
     return shootout;
@@ -132,9 +133,12 @@ export function recordShootoutShot(
   const isSuddenDeath =
     shootout.phase === "sudden_death" || shootout.suddenDeath;
 
+  const shotTeamId = result === "save" ? otherTeam(teamAId, teamBId, teamId) : teamId;
+
   const shot: Shot = {
     id: newId(),
-    teamId,
+    teamId: shotTeamId,
+    playerId,
     result,
     round: isSuddenDeath
       ? shootout.currentRound

@@ -1,10 +1,15 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useParams } from "react-router-dom";
+import { useTournamentContext } from "../context/TournamentContext";
+import { subscribeDisplayCommands } from "../displaySync";
+import { FullscreenToggle } from "./FullscreenToggle";
 import { useFullscreen } from "../hooks/useFullscreen";
-import { loadTournament } from "../storage";
+import { useDisplayEventQueue } from "../hooks/useDisplayEventQueue";
 import { getRegularShotProgress, REGULAR_SHOTS_PER_TEAM, shootoutScore } from "../shootout";
-import { tournamentSync } from "../sync";
+import { DisplayEventOverlay } from "./DisplayEventOverlay";
 import { DisplayTimeoutStatus } from "./DisplayTimeoutStatus";
 import { TimeoutBanner } from "./TimeoutBanner";
+import { GoldenGoalBanner } from "./GoldenGoalBanner";
 import { TeamLogo } from "./TeamLogo";
 import {
   computeRemainingSeconds,
@@ -34,58 +39,125 @@ function DisplayMatchTeam({
 function DisplayShell({
   children,
   className = "",
+  matchId,
 }: {
   children: ReactNode;
   className?: string;
+  matchId?: string;
 }) {
   const viewportRef = useRef<HTMLDivElement>(null);
-  const { active, enter } = useFullscreen(viewportRef);
+  const { active, enter, exit } = useFullscreen(viewportRef);
+  const [fsPrompt, setFsPrompt] = useState(false);
+  const [fsPromptRemote, setFsPromptRemote] = useState(false);
+
+  const clearFsQuery = () => {
+    if (!window.location.search.includes("fs=1")) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("fs");
+    window.history.replaceState({}, "", url);
+  };
+
+  const dismissFsPrompt = () => {
+    setFsPrompt(false);
+    setFsPromptRemote(false);
+    clearFsQuery();
+  };
 
   useEffect(() => {
     document.documentElement.classList.add("display-route");
     if (new URLSearchParams(window.location.search).get("fs") === "1") {
-      void enter().catch(() => {});
+      setFsPrompt(true);
     }
     return () => document.documentElement.classList.remove("display-route");
-  }, [enter]);
+  }, []);
+
+  useEffect(() => {
+    if (!matchId) return;
+    return subscribeDisplayCommands(matchId, () => {
+      if (!document.fullscreenElement) {
+        setFsPromptRemote(true);
+        setFsPrompt(true);
+      }
+    });
+  }, [matchId]);
+
+  useEffect(() => {
+    if (active) {
+      setFsPrompt(false);
+      setFsPromptRemote(false);
+      clearFsQuery();
+    }
+  }, [active]);
+
+  const activateFullscreen = () => {
+    void enter()
+      .then(() => {
+        setFsPrompt(false);
+        setFsPromptRemote(false);
+        clearFsQuery();
+      })
+      .catch(() => {});
+  };
 
   return (
     <div
       ref={viewportRef}
       className={`display-viewport${active ? " display-viewport--fullscreen" : ""}`}
     >
-      {!active && (
-        <button
-          type="button"
-          className="display-fullscreen-btn"
-          onClick={() => void enter()}
-          title="Plein écran"
+      {fsPrompt && !active && (
+        <div
+          className="display-fs-prompt display-fs-prompt--tap"
+          role="button"
+          tabIndex={0}
+          aria-label="Cliquez pour passer en plein écran"
+          onClick={activateFullscreen}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              activateFullscreen();
+            }
+          }}
         >
-          Plein écran
-        </button>
+          <div className="display-fs-prompt-card">
+            <p className="display-fs-prompt-kicker">
+              {fsPromptRemote ? "Depuis la table de marque" : "Écran public"}
+            </p>
+            <h2 className="display-fs-prompt-title">Cliquez n&apos;importe où</h2>
+            <p className="display-fs-prompt-hint">
+              pour passer en plein écran
+            </p>
+          </div>
+          <button
+            type="button"
+            className="display-fs-prompt-dismiss"
+            onClick={(e) => {
+              e.stopPropagation();
+              dismissFsPrompt();
+            }}
+          >
+            Plus tard
+          </button>
+        </div>
       )}
+      <FullscreenToggle
+        active={active}
+        onEnter={enter}
+        onExit={exit}
+        className="kiosk-fs-btn kiosk-fs-btn--display"
+      />
       <div className={`display ${className}`.trim()}>{children}</div>
     </div>
   );
 }
 
 export function PublicDisplay() {
-  const [tournament, setTournament] = useState<Tournament | null>(() => loadTournament());
+  const { matchId: routeMatchId } = useParams<{ matchId?: string }>();
+  const { tournament } = useTournamentContext();
 
-  useEffect(() => {
-    const reload = () => setTournament(loadTournament());
-    const unsub = tournamentSync.subscribe(reload);
-    const interval = window.setInterval(reload, 200);
-    const onVisibility = () => {
-      if (document.visibilityState === "visible") reload();
-    };
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => {
-      unsub();
-      clearInterval(interval);
-      document.removeEventListener("visibilitychange", onVisibility);
-    };
-  }, []);
+  const displayMatchId = routeMatchId ?? tournament?.activeMatchId ?? undefined;
+  const match = displayMatchId
+    ? tournament?.matches.find((m) => m.id === displayMatchId)
+    : undefined;
 
   if (!tournament) {
     return (
@@ -96,13 +168,15 @@ export function PublicDisplay() {
     );
   }
 
-  const match = tournament.matches.find((m) => m.id === tournament.activeMatchId);
-
   if (!match) {
     return (
-      <DisplayShell className="display-empty">
+      <DisplayShell className="display-empty" matchId={displayMatchId}>
         <h1>{tournament.name}</h1>
-        <p>En attente d'un match actif</p>
+        <p>
+          {routeMatchId
+            ? "Match introuvable ou pas encore synchronisé"
+            : "En attente d'un match actif"}
+        </p>
       </DisplayShell>
     );
   }
@@ -118,6 +192,9 @@ function MatchDisplay({ tournament, match }: { tournament: Tournament; match: Ma
   const teamA = getTeam(tournament, match.teamAId);
   const teamB = getTeam(tournament, match.teamBId);
   const remaining = computeRemainingSeconds(match);
+  const highlight = useDisplayEventQueue(tournament, match);
+  const highlightTeam =
+    highlight?.teamSide === "A" ? teamA : highlight?.teamSide === "B" ? teamB : undefined;
   const p1 = match.periodWinners.period1
     ? getTeam(tournament, match.periodWinners.period1)?.name
     : null;
@@ -129,10 +206,12 @@ function MatchDisplay({ tournament, match }: { tournament: Tournament; match: Ma
   return (
     <DisplayShell
       className={`display-match${isFinished ? " display-match--finished" : ""}`}
+      matchId={match.id}
     >
       {match.timeout && (
         <TimeoutBanner tournament={tournament} timeout={match.timeout} variant="display" />
       )}
+      <GoldenGoalBanner match={match} />
 
       <header className="display-header">
         <span className="tournament-name">{tournament.name}</span>
@@ -142,7 +221,11 @@ function MatchDisplay({ tournament, match }: { tournament: Tournament; match: Ma
       </header>
 
       <div className="display-match-head">
-        {match.label && <h1 className="display-match-label">{match.label}</h1>}
+        {(match.courtLabel || match.label) && (
+          <h1 className="display-match-label">
+            {[match.courtLabel, match.label].filter(Boolean).join(" · ")}
+          </h1>
+        )}
         <p className="display-period">
           Période {match.period} / 2
           {match.scheduledTime && (
@@ -200,6 +283,7 @@ function MatchDisplay({ tournament, match }: { tournament: Tournament; match: Ma
         )}
       </footer>
 
+      <DisplayEventOverlay event={highlight} team={highlightTeam} />
     </DisplayShell>
   );
 }
@@ -208,6 +292,9 @@ function ShootoutDisplay({ tournament, match }: { tournament: Tournament; match:
   const shootout = match.shootout!;
   const teamA = getTeam(tournament, match.teamAId);
   const teamB = getTeam(tournament, match.teamBId);
+  const highlight = useDisplayEventQueue(tournament, match);
+  const highlightTeam =
+    highlight?.teamSide === "A" ? teamA : highlight?.teamSide === "B" ? teamB : undefined;
   const scoreA = shootoutScore(shootout, match.teamAId);
   const scoreB = shootoutScore(shootout, match.teamBId);
   const currentTeam = getTeam(tournament, shootout.currentTeamId);
@@ -220,7 +307,7 @@ function ShootoutDisplay({ tournament, match }: { tournament: Tournament; match:
   const shotsB = shootout.shots.filter((s) => s.teamId === match.teamBId);
 
   return (
-    <DisplayShell className="display-shootout">
+    <DisplayShell className="display-shootout" matchId={match.id}>
       <h1 className="shootout-title">SHOOT-OUT</h1>
 
       {isSetup && (
@@ -292,6 +379,8 @@ function ShootoutDisplay({ tournament, match }: { tournament: Tournament; match:
           </div>
         </footer>
       )}
+
+      <DisplayEventOverlay event={highlight} team={highlightTeam} />
     </DisplayShell>
   );
 }
