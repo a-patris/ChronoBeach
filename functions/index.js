@@ -1,18 +1,137 @@
 const functions = require("firebase-functions/v1");
 const { initializeApp } = require("firebase-admin/app");
+const { getAuth } = require("firebase-admin/auth");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 
 initializeApp();
 
 const APP_NAME = "ChronoBeach";
+const BOOTSTRAP_SUPER_ADMIN_EMAIL = "amaury.patris@gmail.com";
 
 function getAdminEmail() {
   return process.env.ADMIN_NOTIFY_EMAIL || "amaury.patris@gmail.com";
 }
 
 function getAppAdminUrl() {
-  return process.env.APP_ADMIN_URL || "https://chronobeach.vercel.app/users";
+  return process.env.APP_ADMIN_URL || "https://chrono-beach.vercel.app/users";
 }
+
+function normalizeAccessCode(code) {
+  return String(code).trim().toUpperCase().replace(/\s+/g, "");
+}
+
+async function deleteAccessCodes(db, access) {
+  if (!access) return;
+  if (access.markerCode) {
+    await db.collection("accessCodes").doc(normalizeAccessCode(access.markerCode)).delete();
+  }
+  if (access.spectatorCode) {
+    await db.collection("accessCodes").doc(normalizeAccessCode(access.spectatorCode)).delete();
+  }
+}
+
+async function deleteTournamentTree(db, tournamentId, tournamentData) {
+  const sessions = await db
+    .collection("tournaments")
+    .doc(tournamentId)
+    .collection("markerSessions")
+    .get();
+  for (const session of sessions.docs) {
+    await session.ref.delete();
+  }
+
+  await deleteAccessCodes(db, tournamentData.access);
+  await db.collection("tournamentSummaries").doc(tournamentId).delete();
+  await db.collection("tournaments").doc(tournamentId).delete();
+}
+
+async function purgeUserData(db, uid) {
+  const requests = await db.collection("activationRequests").where("uid", "==", uid).get();
+  for (const request of requests.docs) {
+    await request.ref.delete();
+  }
+
+  const tournaments = await db.collection("tournaments").get();
+  for (const tournament of tournaments.docs) {
+    const data = tournament.data();
+    if (data.managerUid !== uid && data.ownerUid !== uid) continue;
+    await deleteTournamentTree(db, tournament.id, data);
+  }
+
+  await db.collection("users").doc(uid).delete();
+}
+
+async function canDeleteTarget(db, callerUid, callerEmail, targetUid) {
+  if (targetUid === callerUid) {
+    const targetDoc = await db.collection("users").doc(targetUid).get();
+    if (!targetDoc.exists) {
+      throw new functions.https.HttpsError("not-found", "Compte introuvable.");
+    }
+    const target = targetDoc.data();
+    if (
+      target.role === "super_admin" ||
+      callerEmail === BOOTSTRAP_SUPER_ADMIN_EMAIL
+    ) {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "Ce compte ne peut pas être supprimé depuis l'application.",
+      );
+    }
+    return;
+  }
+
+  const callerDoc = await db.collection("users").doc(callerUid).get();
+  const callerRole = callerDoc.exists ? callerDoc.data().role : null;
+  const callerIsSuperAdmin =
+    callerRole === "super_admin" || callerEmail === BOOTSTRAP_SUPER_ADMIN_EMAIL;
+  const callerIsAdmin = callerRole === "admin";
+
+  if (!callerIsSuperAdmin && !callerIsAdmin) {
+    throw new functions.https.HttpsError("permission-denied", "Non autorisé.");
+  }
+
+  const targetDoc = await db.collection("users").doc(targetUid).get();
+  if (!targetDoc.exists) {
+    throw new functions.https.HttpsError("not-found", "Compte introuvable.");
+  }
+
+  const target = targetDoc.data();
+  if (target.role === "super_admin") {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "Impossible de supprimer un super administrateur.",
+    );
+  }
+  if (callerIsAdmin && target.role !== "tournament_manager") {
+    throw new functions.https.HttpsError("permission-denied", "Non autorisé.");
+  }
+}
+
+exports.deleteUserAccount = functions
+  .region("europe-west1")
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Connexion requise.");
+    }
+
+    const callerUid = context.auth.uid;
+    const callerEmail = String(context.auth.token.email || "").toLowerCase();
+    const targetUid = typeof data?.uid === "string" && data.uid.trim()
+      ? data.uid.trim()
+      : callerUid;
+
+    const db = getFirestore();
+    await canDeleteTarget(db, callerUid, callerEmail, targetUid);
+    await purgeUserData(db, targetUid);
+
+    try {
+      await getAuth().deleteUser(targetUid);
+    } catch (err) {
+      if (err.code !== "auth/user-not-found") throw err;
+    }
+
+    return { ok: true };
+  });
 
 exports.notifyActivationRequest = functions
   .region("europe-west1")

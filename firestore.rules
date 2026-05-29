@@ -145,10 +145,9 @@ service cloud.firestore {
         request.resource.data.status == "pending" &&
         request.resource.data.email == request.auth.token.email;
 
-      allow get: if isPlatformStaff() ||
+      // read = get + list (requête uid == auth.uid pour hasPendingActivationRequest)
+      allow read: if isPlatformStaff() ||
         (isSignedIn() && resource.data.uid == request.auth.uid);
-
-      allow list: if isPlatformStaff();
 
       allow update: if isPlatformStaff() &&
         request.resource.data.uid == resource.data.uid &&

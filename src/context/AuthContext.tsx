@@ -15,7 +15,7 @@ import {
 } from "firebase/auth";
 import { getFirebaseAuth } from "../config/firebaseApp";
 import { isFirebaseConfigured } from "../config/firebase";
-import { resolveAuthProfile, completePasswordSetup as saveNewPassword, registerDiscoveryAccount } from "../auth/userService";
+import { resolveAuthProfile, completePasswordSetup as saveNewPassword, registerDiscoveryAccount, deleteUserAccount as requestAccountDeletion } from "../auth/userService";
 import { setBillingContext } from "../auth/billingContext";
 import {
   canManageUsers,
@@ -23,6 +23,7 @@ import {
   isSuperAdminEmail,
   type UserProfile,
   type UserRole,
+  canSelfDeleteAccount as userCanSelfDeleteAccount,
 } from "../auth/roles";
 import { canGoLive } from "../auth/billing";
 
@@ -41,9 +42,11 @@ type AuthContextValue = {
   mustChangePassword: boolean;
   canGoLive: boolean;
   isDiscoveryMode: boolean;
+  canSelfDeleteAccount: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUpDiscovery: (email: string, password: string, displayName: string) => Promise<void>;
   signOutUser: () => Promise<void>;
+  deleteAccount: (targetUid?: string) => Promise<void>;
   completePasswordSetup: (password: string) => Promise<void>;
 };
 
@@ -155,6 +158,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setBillingContext(undefined, null);
   }, []);
 
+  const deleteAccount = useCallback(
+    async (targetUid?: string) => {
+      const uid = targetUid ?? user?.uid;
+      if (!uid) throw new Error("Non connecté");
+      await requestAccountDeletion(uid);
+      if (uid === user?.uid) {
+        await signOut(getFirebaseAuth());
+        setProfile(null);
+        setRole(null);
+        setAccessDenied(null);
+        setBillingContext(undefined, null);
+      }
+    },
+    [user],
+  );
+
   const completePasswordSetup = useCallback(
     async (password: string) => {
       await saveNewPassword(password);
@@ -168,6 +187,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const userCanGoLive = canGoLive(profile?.billingStatus, role);
   const isDiscoveryMode =
     authRequired && role === "tournament_manager" && profile?.billingStatus === "discovery";
+  const canSelfDeleteAccountFlag = userCanSelfDeleteAccount(user?.email, role);
 
   const isSuperAdmin = role === "super_admin";
   const platformStaff = isPlatformStaff(role);
@@ -189,9 +209,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       mustChangePassword,
       canGoLive: userCanGoLive,
       isDiscoveryMode,
+      canSelfDeleteAccount: canSelfDeleteAccountFlag,
       signIn,
       signUpDiscovery,
       signOutUser,
+      deleteAccount,
       completePasswordSetup,
     }),
     [
@@ -208,9 +230,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       mustChangePassword,
       userCanGoLive,
       isDiscoveryMode,
+      canSelfDeleteAccountFlag,
       signIn,
       signUpDiscovery,
       signOutUser,
+      deleteAccount,
       completePasswordSetup,
     ],
   );

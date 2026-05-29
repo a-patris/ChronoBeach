@@ -781,6 +781,31 @@ html.display-route #root {
   color: #fff;
 }
 
+.btn-danger-outline {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 55%, var(--border));
+}
+
+.btn-danger-outline:hover {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+
+.account-delete-panel {
+  border-color: color-mix(in srgb, var(--danger) 35%, var(--border));
+}
+
+.account-delete-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.account-delete-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
 .btn-outline {
   background: transparent;
   color: var(--text);

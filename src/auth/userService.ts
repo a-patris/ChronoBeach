@@ -5,6 +5,7 @@ import {
   signOut,
   updatePassword,
 } from "firebase/auth";
+import { getFunctions, httpsCallable } from "firebase/functions";
 import {
   collection,
   doc,
@@ -14,8 +15,8 @@ import {
   setDoc,
   writeBatch,
 } from "firebase/firestore";
-import { readFirebaseConfig } from "../config/firebase";
-import { getFirebaseAuth, getFirestoreDb } from "../config/firebaseApp";
+import { readFirebaseConfig, isFirebaseConfigured } from "../config/firebase";
+import { getFirebaseAuth, getFirestoreDb, initFirebaseApp } from "../config/firebaseApp";
 import type { User } from "firebase/auth";
 import {
   isPlatformStaff,
@@ -363,6 +364,37 @@ export function createPasswordChangeErrorMessage(code: string): string {
     default:
       return "Impossible de mettre à jour le mot de passe.";
   }
+}
+
+export function createAccountDeletionErrorMessage(code: string): string {
+  switch (code) {
+    case "functions/permission-denied":
+    case "permission-denied":
+      return "Vous n'avez pas l'autorisation de supprimer ce compte.";
+    case "functions/not-found":
+    case "not-found":
+      return "Compte introuvable.";
+    case "functions/unauthenticated":
+    case "unauthenticated":
+      return "Connectez-vous pour supprimer ce compte.";
+    default:
+      return "Impossible de supprimer le compte.";
+  }
+}
+
+/** Supprime le compte Auth + données Firestore associées (Cloud Function). */
+export async function deleteUserAccount(targetUid: string): Promise<void> {
+  if (!isFirebaseConfigured()) {
+    throw new Error("Firebase non configuré.");
+  }
+  const app = initFirebaseApp();
+  if (!app) throw new Error("Firebase non configuré.");
+
+  const fn = httpsCallable<{ uid: string }, { ok: boolean }>(
+    getFunctions(app, "europe-west1"),
+    "deleteUserAccount",
+  );
+  await fn({ uid: targetUid });
 }
 
 /** 1er login : remplace le mot de passe temporaire. */

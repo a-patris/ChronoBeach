@@ -16,6 +16,7 @@ import { normalizeTournamentSettings, OFFICIAL_ROSTER_SIZE } from "../tournament
 import type { Tournament } from "../types";
 import { DiscoveryWelcome } from "./DiscoveryWelcome";
 import { usePendingActivationCount } from "./ActivationRequestsPanel";
+import { AccountDeletePanel } from "./AccountDeletePanel";
 
 function formatDate(iso?: string): string {
   if (!iso) return "—";
@@ -342,6 +343,8 @@ export function HomePage() {
           </ul>
         )}
       </section>
+
+      <AccountDeletePanel />
     </main>
   );
 }

@@ -4,12 +4,14 @@ import { useAuth } from "../context/AuthContext";
 import {
   createUserAccount,
   createUserCreationErrorMessage,
+  createAccountDeletionErrorMessage,
   listUserProfiles,
   updateUserBillingStatus,
   type BillingStatus,
 } from "../auth/userService";
 import {
   canCreateRole,
+  canDeleteUser,
   creatableRoles,
   roleLabel,
   type UserProfile,
@@ -23,7 +25,7 @@ import {
 import { ActivationRequestsPanel } from "./ActivationRequestsPanel";
 
 export function UserManagementPage() {
-  const { user, role, profileLoading, authRequired, canManageUsers, isSuperAdmin } = useAuth();
+  const { user, role, profileLoading, authRequired, canManageUsers, isSuperAdmin, deleteAccount } = useAuth();
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState("");
@@ -35,6 +37,7 @@ export function UserManagementPage() {
   const [success, setSuccess] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [updatingUid, setUpdatingUid] = useState<string | null>(null);
+  const [deletingUid, setDeletingUid] = useState<string | null>(null);
 
   const allowedRoles = creatableRoles(role);
 
@@ -115,6 +118,28 @@ export function UserManagementPage() {
       window.alert("Impossible de mettre à jour le statut commercial.");
     } finally {
       setUpdatingUid(null);
+    }
+  };
+
+  const handleDeleteUser = async (target: UserProfile) => {
+    if (!user || !canDeleteUser(role, user.uid, target)) return;
+    const ok = window.confirm(
+      `Supprimer définitivement le compte « ${target.displayName} » (${target.email}) ?\n\nTournois et données associées seront effacés.`,
+    );
+    if (!ok) return;
+
+    setDeletingUid(target.uid);
+    try {
+      await deleteAccount(target.uid);
+      setUsers((prev) => prev.filter((u) => u.uid !== target.uid));
+      setSuccess(`Compte ${target.email} supprimé.`);
+      setError(null);
+    } catch (err) {
+      const code =
+        err instanceof Error && "code" in err ? String((err as { code: string }).code) : "";
+      setError(createAccountDeletionErrorMessage(code));
+    } finally {
+      setDeletingUid(null);
     }
   };
 
@@ -228,7 +253,7 @@ export function UserManagementPage() {
                     <select
                       className="user-billing-select"
                       value={u.billingStatus ?? "discovery"}
-                      disabled={updatingUid === u.uid}
+                      disabled={updatingUid === u.uid || deletingUid === u.uid}
                       onChange={(e) =>
                         void handleBillingChange(u.uid, normalizeBillingStatus(e.target.value))
                       }
@@ -245,6 +270,16 @@ export function UserManagementPage() {
                         {billingStatusLabel(u.billingStatus)}
                       </span>
                     )
+                  )}
+                  {user && canDeleteUser(role, user.uid, u) && (
+                    <button
+                      type="button"
+                      className="btn btn-outline btn-sm btn-danger-outline"
+                      disabled={deletingUid === u.uid}
+                      onClick={() => void handleDeleteUser(u)}
+                    >
+                      {deletingUid === u.uid ? "Suppression…" : "Supprimer"}
+                    </button>
                   )}
                 </div>
               </li>

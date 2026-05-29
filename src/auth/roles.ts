@@ -75,6 +75,27 @@ export function canCreateRole(creatorRole: UserRole | null, target: UserRole): b
   return creatableRoles(creatorRole).includes(target);
 }
 
+/** Un admin peut-il supprimer ce compte depuis /users ? */
+export function canDeleteUser(
+  actorRole: UserRole | null,
+  actorUid: string,
+  target: UserProfile,
+): boolean {
+  if (!actorRole || target.uid === actorUid) return false;
+  if (target.role === "super_admin") return false;
+  if (actorRole === "super_admin") return true;
+  if (actorRole === "admin") return target.role === "tournament_manager";
+  return false;
+}
+
+export function canSelfDeleteAccount(
+  email: string | null | undefined,
+  role: UserRole | null,
+): boolean {
+  if (isSuperAdminEmail(email) || role === "super_admin") return false;
+  return role === "tournament_manager" || role === "admin";
+}
+
 export function canManageTournament(
   role: UserRole | null,
   userUid: string | undefined,
