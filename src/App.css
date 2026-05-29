@@ -5636,6 +5636,96 @@ html.spectator-mobile-route body {
   margin: 0.35rem 0 0;
 }
 
+.activation-requests-page-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.activation-requests-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.activation-requests-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.85rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.activation-requests-filter:hover {
+  border-color: var(--accent);
+}
+
+.activation-requests-filter--active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+
+.activation-requests-filter-count {
+  min-width: 1.25rem;
+  height: 1.25rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  background: var(--border);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.25rem;
+  text-align: center;
+}
+
+.activation-requests-filter--active .activation-requests-filter-count {
+  background: color-mix(in srgb, var(--accent) 25%, var(--border));
+}
+
+.activation-requests-filter-count--alert {
+  background: var(--danger);
+  color: #fff;
+}
+
+.activation-requests-filter-hint {
+  margin: -0.35rem 0 0.85rem;
+}
+
+.activation-requests-link-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s;
+}
+
+.activation-requests-link-card:hover {
+  border-color: var(--accent);
+}
+
+.activation-requests-link-card .hint {
+  margin-left: auto;
+}
+
+.user-mgmt-intro .activation-requests-link-card {
+  margin-top: 1.25rem;
+}
+
 .home-auth-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));

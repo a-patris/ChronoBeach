@@ -22,7 +22,7 @@ import {
   billingStatusLabel,
   normalizeBillingStatus,
 } from "../auth/billing";
-import { ActivationRequestsPanel } from "./ActivationRequestsPanel";
+import { ActivationRequestsLink } from "./ActivationRequestsPanel";
 
 export function UserManagementPage() {
   const { user, role, profileLoading, authRequired, canManageUsers, isSuperAdmin, deleteAccount } = useAuth();
@@ -145,9 +145,7 @@ export function UserManagementPage() {
 
   return (
     <main className="page home-page home-page--users">
-      <ActivationRequestsPanel />
-
-      <section className="panel">
+      <section className="panel user-mgmt-intro">
         <Link to="/" className="hint home-back-link">
           ← Accueil
         </Link>
@@ -157,6 +155,7 @@ export function UserManagementPage() {
             ? "Créez des administrateurs ou des responsables de tournoi. Le statut « Découverte » permet de configurer sans lancer le direct."
             : "Créez des responsables de tournoi pour vos événements."}
         </p>
+        <ActivationRequestsLink />
       </section>
 
       <section className="panel">

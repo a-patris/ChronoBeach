@@ -222,12 +222,17 @@ export function HomePage() {
           </div>
           <div className="home-header-actions">
             {canManageUsers && (
-              <Link to="/users" className="btn btn-outline nav-users-link">
-                Gérer les comptes
-                {isPlatformStaff && pendingRequests > 0 && (
-                  <span className="nav-badge">{pendingRequests}</span>
-                )}
-              </Link>
+              <>
+                <Link to="/activation-requests" className="btn btn-outline nav-users-link">
+                  Demandes
+                  {isPlatformStaff && pendingRequests > 0 && (
+                    <span className="nav-badge">{pendingRequests}</span>
+                  )}
+                </Link>
+                <Link to="/users" className="btn btn-outline">
+                  Comptes
+                </Link>
+              </>
             )}
             <button type="button" className="btn btn-outline" onClick={() => void signOutUser()}>
               Déconnexion
@@ -243,12 +248,17 @@ export function HomePage() {
           </p>
           <div className="home-header-actions">
             {canManageUsers && (
-              <Link to="/users" className="btn btn-outline btn-sm nav-users-link">
-                Admin
-                {isPlatformStaff && pendingRequests > 0 && (
-                  <span className="nav-badge">{pendingRequests}</span>
-                )}
-              </Link>
+              <>
+                <Link to="/activation-requests" className="btn btn-outline btn-sm nav-users-link">
+                  Demandes
+                  {isPlatformStaff && pendingRequests > 0 && (
+                    <span className="nav-badge">{pendingRequests}</span>
+                  )}
+                </Link>
+                <Link to="/users" className="btn btn-outline btn-sm">
+                  Comptes
+                </Link>
+              </>
             )}
             <button type="button" className="btn btn-outline btn-sm" onClick={() => void signOutUser()}>
               Déconnexion

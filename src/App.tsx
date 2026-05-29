@@ -21,6 +21,7 @@ import { AuthGate } from "./components/AuthGate";
 import { useAuth } from "./context/AuthContext";
 import { HomePage } from "./components/HomePage";
 import { UserManagementPage } from "./components/UserManagementPage";
+import { ActivationRequestsPage } from "./components/ActivationRequestsPage";
 import { usePendingActivationCount } from "./components/ActivationRequestsPanel";
 import { JoinHubPage } from "./components/JoinHubPage";
 import { MarkerJoinPage } from "./components/MarkerJoinPage";
@@ -58,12 +59,15 @@ function NavBar() {
         {authRequired && user && (
           <>
             {canManageUsers && (
-              <Link to="/users" className="nav-users-link">
-                Comptes
-                {isPlatformStaff && pendingRequests > 0 && (
-                  <span className="nav-badge">{pendingRequests}</span>
-                )}
-              </Link>
+              <>
+                <Link to="/activation-requests" className="nav-users-link">
+                  Demandes
+                  {isPlatformStaff && pendingRequests > 0 && (
+                    <span className="nav-badge">{pendingRequests}</span>
+                  )}
+                </Link>
+                <Link to="/users">Comptes</Link>
+              </>
             )}
             <button type="button" className="nav-link-btn" onClick={() => void signOutUser()}>
               Déconnexion
@@ -169,6 +173,7 @@ export default function App() {
             <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/users" element={<UserManagementPage />} />
+          <Route path="/activation-requests" element={<ActivationRequestsPage />} />
           <Route path="/join" element={<JoinHubPage />} />
           <Route path="/join/marker" element={<MarkerJoinPage />} />
           <Route path="/join/spectator" element={<SpectatorJoinPage />} />
