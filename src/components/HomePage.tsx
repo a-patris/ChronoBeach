@@ -10,6 +10,7 @@ import { loadTournament } from "../storage";
 import { roleLabel } from "../auth/roles";
 import { billingStatusLabel } from "../auth/billing";
 import { APP_NAME, APP_SHORT_TAGLINE, APP_TAGLINE } from "../config/brand";
+import { dashboardHeadline, dashboardKicker, dashboardTagline } from "../utils/greeting";
 import { tournamentPath } from "../routes/paths";
 import { uid } from "../utils";
 import { normalizeTournamentSettings, OFFICIAL_ROSTER_SIZE } from "../tournamentConfig";
@@ -205,14 +206,19 @@ export function HomePage() {
       ) : (
         <section className="home-dashboard-header panel">
           <div>
-            <p className="home-kicker">Espace organisateur</p>
-            <h1>Bonjour, {profile?.displayName ?? user.email}</h1>
-            <p className="hint">
+            <p className="home-kicker">
+              {dashboardKicker(isPlatformStaff ? "staff" : "organizer")}
+            </p>
+            <h1>{dashboardHeadline(profile?.displayName, user.email)}</h1>
+            <p className="home-dashboard-tagline">
+              {dashboardTagline(isPlatformStaff ? "staff" : "organizer")}
+            </p>
+            <p className="hint home-dashboard-meta">
               {roleLabel(role)}
               {profile?.billingStatus && profile.billingStatus !== "active" && (
                 <> · {billingStatusLabel(profile.billingStatus)}</>
               )}
-              {tournament && (
+              {!authRequired && tournament && (
                 <>
                   {" "}
                   · session locale : <strong>{tournament.name}</strong>

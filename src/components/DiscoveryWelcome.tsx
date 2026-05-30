@@ -1,5 +1,6 @@
 import { APP_NAME } from "../config/brand";
 import { DISCOVERY_LAUNCH_MESSAGE } from "../auth/billing";
+import { resolveWelcomeName } from "../utils/greeting";
 import { ContactActivationCta } from "./ContactActivationCta";
 
 type Props = {
@@ -9,15 +10,17 @@ type Props = {
 };
 
 export function DiscoveryWelcome({ displayName, userEmail, onCreateFocus }: Props) {
+  const welcomeName = resolveWelcomeName(displayName, userEmail);
+
   return (
     <section className="panel discovery-welcome">
       <span className="discovery-banner-badge">Mode découverte</span>
       <h2>
-        Bienvenue{displayName ? `, ${displayName}` : ""} sur {APP_NAME}
+        Bienvenue{welcomeName ? `, ${welcomeName}` : ""}
       </h2>
       <p className="discovery-welcome-lead">
-        Explorez l&apos;outil librement : créez un tournoi, ajoutez vos équipes, préparez poules
-        et feuilles FDME. Tout est configurable — le direct attend votre abonnement.
+        Explorez {APP_NAME} librement : créez un tournoi, ajoutez vos équipes, préparez poules
+        et feuilles FDME. Le direct s&apos;active quand vous êtes prêt.
       </p>
 
       <div className="discovery-welcome-grid">

@@ -481,6 +481,18 @@ html.display-route #root {
   gap: 1rem;
 }
 
+.home-dashboard-tagline {
+  margin: 0.35rem 0 0.5rem;
+  font-size: 1.05rem;
+  line-height: 1.45;
+  color: color-mix(in srgb, var(--text) 88%, var(--accent));
+  max-width: 36rem;
+}
+
+.home-dashboard-meta {
+  margin: 0;
+}
+
 .home-header-actions {
   display: flex;
   flex-wrap: wrap;

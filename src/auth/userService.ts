@@ -32,6 +32,14 @@ import {
   type BillingStatus,
 } from "./billing";
 
+function formatNameFromEmail(email: string | null | undefined): string | null {
+  const local = email?.split("@")[0];
+  if (!local) return null;
+  const first = local.split(".")[0] || local;
+  if (!first) return null;
+  return first.charAt(0).toUpperCase() + first.slice(1).toLowerCase();
+}
+
 function profileFromDoc(uid: string, data: Record<string, unknown>): UserProfile {
   const role = normalizeUserRole(data.role) ?? "tournament_manager";
   return {
@@ -65,7 +73,10 @@ export async function ensureUserProfile(user: User): Promise<UserProfile> {
     const profile: UserProfile = {
       uid: user.uid,
       email: user.email ?? "",
-      displayName: user.displayName ?? user.email?.split("@")[0] ?? "Admin",
+      displayName:
+        user.displayName ??
+        formatNameFromEmail(user.email) ??
+        "Admin",
       role: "super_admin",
       billingStatus: "active",
       createdAt: existing.data()?.createdAt ?? new Date().toISOString(),
